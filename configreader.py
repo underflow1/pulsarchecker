@@ -1,16 +1,9 @@
 from configparser import ConfigParser
 filename='config.ini',
  
-def read_db_config(section='postgres'):
-    """ Read database configuration file and return a dictionary object
-    :param filename: name of the configuration file
-    :param section: section of database configuration
-    :return: a dictionary of database parameters
-    """
-    # create parser and read ini configuration file
+def read_config(section):
     parser = ConfigParser()
     parser.read(filename)
-    # get section, default to mysql
     db = {}
     if parser.has_section(section):
         items = parser.items(section)

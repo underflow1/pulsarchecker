@@ -1,17 +1,13 @@
-import psycopg2
-import time
-import os
-#from datetime import datetime, timedelta, date, time
-import json
+import psycopg2, time, os, json, smtplib
+from datetime import datetime, timedelta, date
 from jinja2 import Template
 from configparser import ConfigParser
-import smtplib
 from email.mime.text import MIMEText
 from email.header    import Header
-from configreader import read_db_config
-recipients_emails = ["ak@teploset.ru", "it@teploset.ru", "abulatov@rsks.su"]
+from configreader import read_config
 
-db_config = read_db_config()
+db_config = read_config('postgres')
+email_config = read_config('email')
 print("Connecting to database...")
 time.sleep(1)
 try:
@@ -329,10 +325,6 @@ class incident():
 				{'result':True, 
 				'data':data
 				})
-
-
-
-	
 	
 
 def sendEmail(message):
@@ -340,9 +332,8 @@ def sendEmail(message):
 	msg['Subject'] = Header('Новый инцидент.', 'utf-8')
 	msg['From'] = "Система мониторинга Пульсар <pulsar@ce.int>"
 	msg['To'] = ", ".join(recipients_emails)
-	HOST = "mail-hub.ce.int"
-	server = smtplib.SMTP(HOST)
-	server.sendmail(msg['From'], recipients_emails, msg.as_string())
+	server = smtplib.SMTP(email_config['HOST'])
+	server.sendmail(msg['From'], email_config['recipients_emails'].split(','), msg.as_string())
 	server.quit()
 
 def incidentExists(dump):
