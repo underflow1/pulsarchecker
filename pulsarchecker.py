@@ -21,7 +21,7 @@ else:
 # !временно инициализация параметров
 averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
 pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
-pollhourdelta = 2 # лаг добавляемый при проверке (в часах)
+pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
 
 class controlledParameter():
 	def __init__(self, id):
@@ -223,20 +223,19 @@ class controlledParameter():
 			'_paramId_': self._paramId_, 
 			'_paramName': self._paramName, 
 			'_placeId': self._placeId, 
-			'childPlace':  self._placeTypeName + self._placeName,
-			'parentPlace': self._parentPlaceTypeName + self._parentPlaceName,
+			'childPlace':  self._placeTypeName + ' ' + self._placeName,
+			'parentPlace': self._parentPlaceTypeName + ' ' + self._parentPlaceName,
 			'incidentType': lastIncidentType, 
 			'description':description
 			}
 		self.foundedIncidentsList.append(data)
-		print(data)
+		#print(data)
 		return data
 
 	def checkConnectionLost(self): #1
 		if not self.initCompleted:
 			return False
 		else:
-			print((datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)))
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
 				self.dumpIncident(1)
 			return False
@@ -295,31 +294,91 @@ class controlledParameter():
 					else:
 						return False
 
-class incident():
-	def getIncident(self):
-		data = []
-		if json.loads(self.checkConnectionLost())['result']:
-			data.append(self.dump())
-		else: 
-			if self.controlledParameter.datatype == 1: 
-				if json.loads(self.checkConsumptionUp())['result']:
-					data.append(self.dump())
-				else:
-					if json.loads(self.checkConsumptionStale())['result']:
-						data.append(self.dump())
-					else:
-						return json.dumps({'result':False})
-			if self.controlledParameter.datatype == 2: 
-				if json.loads(self.checkValueDown())['result']:
-					data.append(self.dump())
-				else: 
-					return json.dumps({'result':False})
+	def getIncidents(self):
+		if not self.checkConnectionLost():
+			if self.controlledParamType == 1:
+				if not self.checkConsumptionUp():
+					if not self.checkConsumptionStale():
+						pass
+			if self.controlledParamType == 2:
+				if not self.checkValueDown():
+					pass
+			return self.foundedIncidentsList
 
-		return json.dumps(
-				{'result':True, 
-				'data':data
-				})
-	
+class incidentOperations():
+	def __init__(self):
+		self.autoCloseOpenedIncidents()
+
+	def autoCloseOpenedIncidents(self):
+		a = 0
+		self.cursor = conn.cursor()
+		query = 'SELECT id, param_id, type FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
+		try:
+			self.cursor.execute(query)
+			query = self.cursor.fetchall()
+		except Exception as e:
+			print(e)
+			return False
+		else:
+			for row in query:
+				if row[2] == 1:  # автозакрываем только невыходы на связь
+					if not controlledParameter(row[1]).checkConnectionLost:
+						query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
+						args = (row[0],)
+						try:
+							self.cursor.execute(query, args)
+						except Exception as e:
+							print(e)
+							conn.rollback()
+						else:
+							conn.commit()
+							a = a + 1
+			print('autoclosed ' + str(a))
+
+	def incidentExists(self,dumprecord):
+		cursor = conn.cursor()
+		query = 'SELECT param_id, type FROM "Tepl"."Alert_cnt" WHERE param_id = %s AND type = %s AND status = \'active\' '
+		args = (dumprecord['_paramId_'], dumprecord['incidentType'])
+		try:
+			cursor.execute(query, args)
+			query = cursor.fetchall()
+		except Exception as e:
+			print(e)
+			return False
+		else:
+			if len(query) > 0:
+				return True
+		return False
+		
+	def saveIncidents(self, dump):
+		a = 0
+		if len(dump) > 0:
+			cursor = conn.cursor()
+			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description) \
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s); '
+			for dumprecord in dump:
+				if not self.incidentExists(dumprecord):
+					if dumprecord['_lastArchiveTime'] == False:
+						d = date(2000, 1, 1)
+						t = time(00, 00)
+						dumprecord['_lastArchiveTime'] = datetime.combine(d, t)
+					args = (
+					dumprecord.get('_lastArchiveTime'),
+					dumprecord.get('_paramId_'),
+					dumprecord.get('incidentType'),
+					dumprecord.get('_paramName'),
+					dumprecord.get('_placeId'),
+					dumprecord.get('parentPlace'),
+					dumprecord.get('childPlace'),
+					dumprecord.get('description'))
+					try:
+						cursor.execute(query, args)
+					except Exception as e:
+						print(e)
+						conn.rollback()
+					else:
+						conn.commit()
+			print('saved ' + str(a))
 
 def sendEmail(message):
 	recipients_emails = email_config['recipients_emails'].split(',')
@@ -330,87 +389,8 @@ def sendEmail(message):
 	server = smtplib.SMTP(email_config['HOST'])
 	server.sendmail(msg['From'], recipients_emails, msg.as_string())
 	server.quit()
-
-def incidentExists(dump):
-	cursor = conn.cursor()
-	query = 'SELECT param_id, type FROM "Tepl"."Alert_cnt" WHERE param_id = %s AND type = %s AND status = \'active\' '
-	args = (dump.get('param_id'),dump.get('type'))
-	try:
-		cursor.execute(query, args)
-		query = cursor.fetchall()
-	except Exception as e:
-		print(e)
-		return False
-	else:
-		if len(query) > 0:
-			return True
-	return False
 	
 
-def autoCloseIncidents():
-	cursor = conn.cursor()
-	query = 'SELECT id, param_id, type FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
-	try:
-		cursor.execute(query)
-		query = cursor.fetchall()
-	except Exception as e:
-		print(e)
-		return False
-	activeincidents = []
-	closedincidents = []
-	for row in query:
-		ainc = {}
-		ainc['id'] = row[0]
-		ainc['param_id'] = row[1]
-		ainc['type'] = row[2]
-		activeincidents.append(ainc)
-	for item in activeincidents:
-		if item['type'] == 1: # автозакрываем только невыходы на связь
-			parameter = controlledParameter(item['param_id'])
-			autoclosecandidate = incident(parameter)
-			if not json.loads(autoclosecandidate.checkConnectionLost())['result']:
-				query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
-				args = (item['id'],)
-				try:
-					cursor.execute(query, args)
-				except Exception as e:
-					print(e)
-					conn.rollback()
-				else:
-					conn.commit()	
-					closedincidents.append(item)		
-	if len(closedincidents) > 0:
-		return closedincidents
-	return False
-
-def saveIncidents(newincidents):
-	if len(newincidents) > 0:
-		cursor = conn.cursor()
-		query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description) \
-		VALUES (%s, %s, %s, %s, %s, %s, %s, %s); '
-		for newinc in newincidents:
-			if not newinc.get('time'):
-				d = date(2000, 1, 1)
-				t = time(00, 00)
-				time1 = datetime.combine(d, t)
-			else:
-				time1 = newinc.get('time')
-			args = (
-			time1,
-			newinc.get('param_id'),
-			newinc.get('type'),
-			newinc.get('param_name'),
-			newinc.get('place_id'),
-			newinc.get('PARENT'),
-			newinc.get('CHILD'),
-			newinc.get('description'))
-			try:
-				cursor.execute(query, args)
-			except Exception as e:
-				print(e)
-				conn.rollback()
-			else:
-				conn.commit()
 
 # return: list список идентификаторов параметров, по которым идёт сбор данных
 def getParamCheckList():
@@ -439,8 +419,18 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
-a = controlledParameter(57)
-print(a.checkConnectionLost())
-print(a.checkConsumptionUp())
-print(a.checkConsumptionStale())
-print(a.checkValueDown())
+#a = controlledParameter(42)
+#print('-------------')
+#for item in a.getIncidents():
+#	print(item)
+#	incidentOperations().incidentExists(item)
+dump = []
+io = incidentOperations()
+
+for id in getParamCheckList():
+	cp = controlledParameter(id)
+	arr = cp.getIncidents()
+	if arr:
+		for it in arr:
+			dump.append(it)
+io.saveIncidents(dump)
