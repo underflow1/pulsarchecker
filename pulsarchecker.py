@@ -1,5 +1,5 @@
-import psycopg2, time, os, json, smtplib
-from datetime import datetime, timedelta, date
+import psycopg2, os, json, smtplib
+from datetime import datetime, timedelta, date, time
 from jinja2 import Template
 from configparser import ConfigParser
 from email.mime.text import MIMEText
@@ -9,7 +9,6 @@ from configreader import read_config
 db_config = read_config('database')
 email_config = read_config('email')
 print("Connecting to database...")
-time.sleep(1)
 try:
 	conn = psycopg2.connect(**db_config)
 except psycopg2.OperationalError as e:
@@ -27,7 +26,7 @@ pollhourdelta = 2 # лаг добавляемый при проверке (в ч
 class controlledParameter():
 	def __init__(self, id):
 		self.cursor = conn.cursor()
-		self.incidentslist = []
+		self.foundedIncidentsList = []
 		self._paramId_ = id				# значения начинаюищеся с подчеркивания - те что мы берем из базы
 		self._paramTypeId = False		# значения без подчеркивания - вычисленные в ходе инициализации
 		self._paramName = False
@@ -229,6 +228,7 @@ class controlledParameter():
 			'incidentType': lastIncidentType, 
 			'description':description
 			}
+		self.foundedIncidentsList.append(data)
 		print(data)
 		return data
 
@@ -236,8 +236,9 @@ class controlledParameter():
 		if not self.initCompleted:
 			return False
 		else:
+			print((datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)))
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
-				self.incidentslist.append(self.dumpIncident(1))
+				self.dumpIncident(1)
 			return False
 		
 	def checkConsumptionUp(self): #2
@@ -438,7 +439,7 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
-a = controlledParameter(90)
+a = controlledParameter(57)
 print(a.checkConnectionLost())
 print(a.checkConsumptionUp())
 print(a.checkConsumptionStale())
