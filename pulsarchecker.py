@@ -358,7 +358,7 @@ class incidentOperations():
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s); '
 			for dumprecord in dump:
 				if not self.incidentExists(dumprecord):
-					if dumprecord['_lastArchiveTime'] == False:
+					if dumprecord['_lastArchiveTime'] == 'False':
 						d = date(2000, 1, 1)
 						t = time(00, 00)
 						dumprecord['_lastArchiveTime'] = datetime.combine(d, t)
@@ -378,6 +378,7 @@ class incidentOperations():
 						conn.rollback()
 					else:
 						conn.commit()
+						a = a + 1
 			print('saved ' + str(a))
 
 def sendEmail(message):
@@ -433,4 +434,5 @@ for id in getParamCheckList():
 	if arr:
 		for it in arr:
 			dump.append(it)
+
 io.saveIncidents(dump)
