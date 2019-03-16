@@ -1,0 +1,30 @@
+<style>
+   table {
+	font-size: 13px; 
+	font-family: Courier;"
+    border-spacing: 0px; 
+   }
+  </style>
+<table>
+<tbody>
+	{% for parent in subst %}
+<tr>
+<td style="padding: 20px 0px 0px 0px;"><em><strong>{{ parent }}</strong></em></td>
+</tr>
+		{% for child in subst[parent] %}
+<tr>
+<td style="padding: 0px 0px 0px 0px;"><em><strong>=> {{ child }}</strong></em></td>
+</tr>
+			{% for value in subst[parent][child] %}
+<tr>
+<td style="padding: 0px 0px 0px 0px;"><span>--> <strong> {{value[0]}}</strong></span> &nbsp-&nbsp {{value[1]}}</td>
+</tr>
+
+			{% endfor %}
+		{% endfor %}
+	{% endfor %}		
+</tbody>
+</table>
+<br>
+	
+<a href="http://pulsarweb.comenergo.ru">Система мониторинга Пульсар</a>
