@@ -306,8 +306,6 @@ class controlledParameter():
 			return self.foundedIncidentsList
 
 class incidentOperations():
-	def __init__(self):
-		self.autoCloseOpenedIncidents()
 
 	def autoCloseOpenedIncidents(self):
 		a = 0
@@ -352,6 +350,7 @@ class incidentOperations():
 		
 	def saveIncidents(self, dump):
 		a = 0
+		savedIncidents = []
 		if len(dump) > 0:
 			cursor = conn.cursor()
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description) \
@@ -379,18 +378,44 @@ class incidentOperations():
 					else:
 						conn.commit()
 						a = a + 1
+						savedIncidents.append(dumprecord)
 			print('saved ' + str(a))
+			return savedIncidents
 
-def sendEmail(message):
-	recipients_emails = email_config['recipients_emails'].split(',')
-	msg = MIMEText(message, 'html', 'utf-8')
-	msg['Subject'] = Header('Новый инцидент.', 'utf-8')
-	msg['From'] = "Система мониторинга Пульсар <pulsar@ce.int>"
-	msg['To'] = ", ".join(recipients_emails)
-	server = smtplib.SMTP(email_config['HOST'])
-	server.sendmail(msg['From'], recipients_emails, msg.as_string())
-	server.quit()
-	
+
+class email():
+	def __init__(self, dump):
+		self.emailsubst = {}
+		for dumprecord in dump:
+			_parent = dumprecord.get('parentPlace')
+			if _parent not in self.emailsubst:
+				self.emailsubst[_parent] = {}
+			_child = dumprecord.get('childPlace')
+			if _child not in self.emailsubst[_parent]:
+				self.emailsubst[_parent][_child] = []
+			params = (dumprecord.get('_paramName'), dumprecord.get('description'))
+			self.emailsubst[_parent][_child].append(params)
+
+		for parent in self.emailsubst:
+			print(parent)
+			for child in self.emailsubst[parent]:
+				print('=> ' + child)
+				for pr in self.emailsubst[parent][child]:
+					print('---> ' + pr[0],pr[1])
+
+	def send(self):
+		if len(self.emailsubst) > 0:
+			html = open('email.html').read()
+			template = Template(html)
+			message = template.render(subst=self.emailsubst)
+			recipients_emails = email_config['recipients_emails'].split(',')
+			msg = MIMEText(message, 'html', 'utf-8')
+			msg['Subject'] = Header('Новый инцидент.', 'utf-8')
+			msg['From'] = "Система мониторинга Пульсар <pulsar@ce.int>"
+			msg['To'] = ", ".join(recipients_emails)
+			server = smtplib.SMTP(email_config['host'])
+			server.sendmail(msg['From'], recipients_emails, msg.as_string())
+			server.quit()
 
 
 # return: list список идентификаторов параметров, по которым идёт сбор данных
@@ -420,13 +445,10 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
-#a = controlledParameter(42)
-#print('-------------')
-#for item in a.getIncidents():
-#	print(item)
-#	incidentOperations().incidentExists(item)
+
 dump = []
 io = incidentOperations()
+io.autoCloseOpenedIncidents()
 
 for id in getParamCheckList():
 	cp = controlledParameter(id)
@@ -435,4 +457,6 @@ for id in getParamCheckList():
 		for it in arr:
 			dump.append(it)
 
-io.saveIncidents(dump)
+savedIncidentsDump = io.saveIncidents(dump)
+em = email(savedIncidentsDump)
+em.send()
