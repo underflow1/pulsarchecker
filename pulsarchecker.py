@@ -6,7 +6,7 @@ from email.mime.text import MIMEText
 from email.header    import Header
 from configreader import read_config
 
-db_config = read_config('postgres')
+db_config = read_config('database')
 email_config = read_config('email')
 print("Connecting to database...")
 time.sleep(1)
@@ -18,18 +18,11 @@ except psycopg2.OperationalError as e:
 	exit(0)
 else:
 	print('Connected!')
-#try:
-#    conn = psycopg2.connect(dbname='rsks', user='postgres', password='123qweQWE', host='pulsar')
-#except psycopg2.OperationalError as e:
-#    print(e)
-#    exit(0)
-#else:
-#	print('Connected!')
 
 # !временно инициализация параметров
-_averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
-_averagehours = _pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
-_averagehoursdelta = _pollhourdelta = 2 # лаг добавляемый при проверке (в часах)
+averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
+pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
+pollhourdelta = 2 # лаг добавляемый при проверке (в часах)
 
 class controlledParameter():
 	def __init__(self, id):
@@ -243,7 +236,7 @@ class controlledParameter():
 		if not self.initCompleted:
 			return False
 		else:
-			if (datetime.now() - timedelta(hours = _pollhourinterval + _pollhourdelta)) > self._lastArchiveTime:
+			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
 				self.incidentslist.append(self.dumpIncident(1))
 			return False
 		
@@ -251,7 +244,7 @@ class controlledParameter():
 		if not self.initCompleted:
 			return False
 		else:
-			if not (self._paramStartDate + timedelta(days = _averageweekdays)) <= self._lastArchiveTime:
+			if not (self._paramStartDate + timedelta(days = averageweekdays)) <= self._lastArchiveTime:
 				return False
 			else:
 				range = getWeekDateRange(self._lastArchiveTime)
@@ -269,7 +262,7 @@ class controlledParameter():
 		if not self.initCompleted:
 			return False
 		else:
-			if not (self._paramStartDate + timedelta(hours = _pollhourinterval)) <= self._lastArchiveTime:
+			if not (self._paramStartDate + timedelta(hours = pollhourinterval)) <= self._lastArchiveTime:
 				return False
 			else:
 				range = getHourDateRange(self._lastArchiveTime)
@@ -287,7 +280,7 @@ class controlledParameter():
 		if not self.initCompleted:
 			return False
 		else:
-			if not (self._paramStartDate + timedelta(hours = _pollhourinterval)) <= self._lastArchiveTime:
+			if not (self._paramStartDate + timedelta(hours = pollhourinterval)) <= self._lastArchiveTime:
 				return False
 			else:
 				range = getHourDateRange(self._lastArchiveTime)
@@ -328,12 +321,13 @@ class incident():
 	
 
 def sendEmail(message):
+	recipients_emails = email_config['recipients_emails'].split(',')
 	msg = MIMEText(message, 'html', 'utf-8')
 	msg['Subject'] = Header('Новый инцидент.', 'utf-8')
 	msg['From'] = "Система мониторинга Пульсар <pulsar@ce.int>"
 	msg['To'] = ", ".join(recipients_emails)
 	server = smtplib.SMTP(email_config['HOST'])
-	server.sendmail(msg['From'], email_config['recipients_emails'].split(','), msg.as_string())
+	server.sendmail(msg['From'], recipients_emails, msg.as_string())
 	server.quit()
 
 def incidentExists(dump):
@@ -433,14 +427,14 @@ def getParamCheckList():
 # return: list ([0] - начало, [1] - конец)
 def getWeekDateRange(lastDate):
 	datalist = []
-	datalist.append(lastDate - timedelta(days = _averageweekdays))
+	datalist.append(lastDate - timedelta(days = averageweekdays))
 	datalist.append(lastDate - timedelta(days = 1))
 	return datalist
 
 # return: list ([0] - начало, [1] - конец)
 def getHourDateRange(lastDate):
 	datalist = []
-	datalist.append(lastDate - timedelta(hours = _pollhourinterval))
+	datalist.append(lastDate - timedelta(hours = pollhourinterval))
 	datalist.append(lastDate)
 	return datalist
 
