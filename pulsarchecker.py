@@ -382,7 +382,6 @@ class incidentOperations():
 			print('saved ' + str(a))
 			return savedIncidents
 
-
 class email():
 	def __init__(self, dump):
 		self.emailsubst = {}
@@ -445,7 +444,7 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
-
+print(datetime.now())
 dump = []
 io = incidentOperations()
 io.autoCloseOpenedIncidents()
