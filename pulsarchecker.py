@@ -1,27 +1,56 @@
-import psycopg2, os, json, smtplib
+import psycopg2, os, json, smtplib, sys
 from datetime import datetime, timedelta, date, time
 from jinja2 import Template
 from configparser import ConfigParser
 from email.mime.text import MIMEText
 from email.header    import Header
-from configreader import read_config
-
-db_config = read_config('database')
-email_config = read_config('email')
-print("Connecting to database...")
-try:
-	conn = psycopg2.connect(**db_config)
-except psycopg2.OperationalError as e:
-	print(e)
-	print('Connection failed.')
-	exit(0)
-else:
-	print('Connected!')
 
 # !временно инициализация параметров
 averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
 pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
+folder = sys.path[0]
+configfile = folder +'\config.ini'
+
+def read_config(section):
+    parser = ConfigParser()
+    parser.read(configfile)
+    db = {}
+    if parser.has_section(section):
+        items = parser.items(section)
+        for item in items:
+            db[item[0]] = item[1]
+    else:
+        raise Exception('{0} not found in the {1} file'.format(section, configfile))
+ 
+    return db
+
+# return: list список идентификаторов параметров, по которым идёт сбор данных
+def getParamCheckList():
+	query = ' \
+	SELECT prp_id FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True'
+	cursor = conn.cursor()
+	cursor.execute(query)
+	query = cursor.fetchall()
+	params = []
+	for item in query:
+		for el in item:
+			params.append(el)
+	return params
+
+# return: list ([0] - начало, [1] - конец)
+def getWeekDateRange(lastDate):
+	datalist = []
+	datalist.append(lastDate - timedelta(days = averageweekdays))
+	datalist.append(lastDate - timedelta(days = 1))
+	return datalist
+
+# return: list ([0] - начало, [1] - конец)
+def getHourDateRange(lastDate):
+	datalist = []
+	datalist.append(lastDate - timedelta(hours = pollhourinterval))
+	datalist.append(lastDate)
+	return datalist
 
 class controlledParameter():
 	def __init__(self, id):
@@ -417,35 +446,20 @@ class email():
 			server.sendmail(msg['From'], recipients_emails, msg.as_string())
 			server.quit()
 
-
-# return: list список идентификаторов параметров, по которым идёт сбор данных
-def getParamCheckList():
-	query = ' \
-	SELECT prp_id FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True'
-	cursor = conn.cursor()
-	cursor.execute(query)
-	query = cursor.fetchall()
-	params = []
-	for item in query:
-		for el in item:
-			params.append(el)
-	return params
-
-# return: list ([0] - начало, [1] - конец)
-def getWeekDateRange(lastDate):
-	datalist = []
-	datalist.append(lastDate - timedelta(days = averageweekdays))
-	datalist.append(lastDate - timedelta(days = 1))
-	return datalist
-
-# return: list ([0] - начало, [1] - конец)
-def getHourDateRange(lastDate):
-	datalist = []
-	datalist.append(lastDate - timedelta(hours = pollhourinterval))
-	datalist.append(lastDate)
-	return datalist
+db_config = read_config('database')
+email_config = read_config('email')
 
 print(datetime.now())
+print("Connecting to database...")
+try:
+	conn = psycopg2.connect(**db_config)
+except psycopg2.OperationalError as e:
+	print(e)
+	print('Connection failed.')
+	exit(0)
+else:
+	print('Connected!')
+
 dump = []
 io = incidentOperations()
 io.autoCloseOpenedIncidents()
