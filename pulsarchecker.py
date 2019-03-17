@@ -71,6 +71,7 @@ class controlledParameter():
 		self._parentPlaceTypeId = False
 		self._parentPlaceTypeName = False
 		self._parentPlaceName = False
+		self._placeCoord = False
 		
 		self.controlledParamType = False # 1 - delta (volume), 2 - value (pressure)
 		self.controlledPlaceType = False # в дальнейшем для инцидентов на основе типа места (например, для баланса по кусту)
@@ -123,7 +124,8 @@ class controlledParameter():
 				parentplace."Name" as _parentPlaceName, \
 				parentplace.typ_id as _parentPlaceTypeId, \
 				parentplacetype."Name" as _parentPlaceTypeName, \
-				task."DateStart" as _paramStartDate \
+				task."DateStart" as _paramStartDate, \
+				prop."ValueProp" as _placeCoord \
 		FROM "Tepl"."ParamResPlc_cnt" paramlist \
 		LEFT JOIN "Tepl"."ParametrResourse" paramres on paramlist."ParamRes_id" = paramres."ParamRes_id" \
 		LEFT JOIN "Tepl"."Places_cnt" place on paramlist.plc_id = place.plc_id \
@@ -131,6 +133,7 @@ class controlledParameter():
 		LEFT JOIN "Tepl"."Places_cnt" parentplace on place.place_id = parentplace.plc_id \
 		LEFT JOIN "Tepl"."PlaceTyp_cnt" parentplacetype on parentplace.typ_id = parentplacetype.typ_id \
 		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
+		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id = 72) prop on place.plc_id = prop.plc_id \
 		WHERE paramlist.prp_id = %s'
 		args = (self._paramId_,)
 		self.cursor = conn.cursor()
@@ -141,6 +144,9 @@ class controlledParameter():
 			print(e)
 			return False
 		else:
+			coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
+			if not query[12] == None:
+				self._placeCoord = coords.replace('_coords_', query[12])
 			self._paramTypeId = query[1]
 			self._paramName = query[2]
 			self._placeId = query[3]
@@ -152,6 +158,7 @@ class controlledParameter():
 			self._parentPlaceTypeId = query[9]
 			self._parentPlaceTypeName = query[10]
 			self._paramStartDate = query[11].replace(tzinfo=None)
+		
 			return True
 
 	def loadcontrolledParamType(self):
@@ -257,7 +264,8 @@ class controlledParameter():
 			'childPlace':  self._placeTypeName + ' ' + self._placeName,
 			'parentPlace': self._parentPlaceTypeName + ' ' + self._parentPlaceName,
 			'incidentType': lastIncidentType, 
-			'description':description
+			'description':description,
+			'coordinates': self._placeCoord
 			}
 		self.foundedIncidentsList.append(data)
 		#print(data)
