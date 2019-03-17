@@ -11,6 +11,7 @@ pollhourinterval = 2 # интервал выхода на связь пульс�
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
 folder = sys.path[0]
 configfile = folder +'\config.ini'
+templatefile = folder + '\email.html'
 
 def read_config(section):
     parser = ConfigParser()
@@ -434,7 +435,7 @@ class email():
 
 	def send(self):
 		if len(self.emailsubst) > 0:
-			html = open('email.html').read()
+			html = open(templatefile).read()
 			template = Template(html)
 			message = template.render(subst=self.emailsubst)
 			recipients_emails = email_config['recipients_emails'].split(',')
