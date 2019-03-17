@@ -9,9 +9,10 @@ from email.header    import Header
 averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
 pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
-folder = sys.path[0]
-configfile = folder +'\config.ini'
-templatefile = folder + '\email.html'
+dirsep = os.path.sep
+folder = sys.path[0] + dirsep
+configfile = folder +'config.ini'
+templatefile = folder +'email.html'
 
 def read_config(section):
     parser = ConfigParser()
@@ -281,7 +282,7 @@ class controlledParameter():
 				self.averageWeek = self.getAverageValue(range)
 				if not self.averageWeek:
 					self.dumpIncident(7)
-					return False
+					return True
 				else:
 					if (self.averageWeek * 2) < self._lastArchiveData:
 						self.dumpIncident(2)
@@ -446,6 +447,7 @@ class email():
 			server = smtplib.SMTP(email_config['host'])
 			server.sendmail(msg['From'], recipients_emails, msg.as_string())
 			server.quit()
+		print('emailed ' + str(len(self.emailsubst)))	
 
 db_config = read_config('database')
 email_config = read_config('email')
@@ -471,7 +473,7 @@ for id in getParamCheckList():
 	if arr:
 		for it in arr:
 			dump.append(it)
-
+print('finded ' +  str(len(dump)))
 savedIncidentsDump = io.saveIncidents(dump)
 em = email(savedIncidentsDump)
 em.send()
