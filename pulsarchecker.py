@@ -320,7 +320,8 @@ class incidentOperations():
 		else:
 			for row in query:
 				if row[2] == 1:  # автозакрываем только невыходы на связь
-					if not controlledParameter(row[1]).checkConnectionLost:
+					cp = controlledParameter(row[1])
+					if not cp.checkConnectionLost():
 						query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
 						args = (row[0],)
 						try:
