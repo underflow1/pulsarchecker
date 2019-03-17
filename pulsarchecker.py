@@ -248,7 +248,7 @@ class controlledParameter():
 		if lastIncidentType == 6:
 			description = 'Отсутствуют метаданные параметра'	
 		if lastIncidentType == 7:
-			description = 'Невозможно определить среднее значение контроллируемого параметра'	
+			description = 'среднее значение не определено. Падение и повышение контроллировать невозможно!'	
 		data = {
 			'_lastArchiveTime':str(self._lastArchiveTime), 
 			'_paramId_': self._paramId_, 
@@ -300,7 +300,7 @@ class controlledParameter():
 				self.averageHour = self.getAverageValue(range)
 				if not self.averageHour:
 					self.dumpIncident(7)
-					return False
+					return True
 				else:
 					if self.averageHour == 0:
 						self.dumpIncident(3)
