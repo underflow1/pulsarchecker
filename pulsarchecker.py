@@ -393,8 +393,8 @@ class incidentOperations():
 		savedIncidents = []
 		if len(dump) > 0:
 			cursor = conn.cursor()
-			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description) \
-			VALUES (%s, %s, %s, %s, %s, %s, %s, %s); '
+			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap) \
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s); '
 			for dumprecord in dump:
 				if not self.incidentExists(dumprecord):
 					if dumprecord['_lastArchiveTime'] == 'False':
@@ -409,7 +409,9 @@ class incidentOperations():
 					dumprecord.get('_placeId'),
 					dumprecord.get('parentPlace'),
 					dumprecord.get('childPlace'),
-					dumprecord.get('description'))
+					dumprecord.get('description'),
+					dumprecord.get('coordinates')
+					)
 					try:
 						cursor.execute(query, args)
 					except Exception as e:
