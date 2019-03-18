@@ -133,7 +133,7 @@ class controlledParameter():
 		LEFT JOIN "Tepl"."Places_cnt" parentplace on place.place_id = parentplace.plc_id \
 		LEFT JOIN "Tepl"."PlaceTyp_cnt" parentplacetype on parentplace.typ_id = parentplacetype.typ_id \
 		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
-		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id = 72) prop on place.plc_id = prop.plc_id \
+		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id IN (72, 73, 74)) prop on place.plc_id = prop.plc_id \
 		WHERE paramlist.prp_id = %s'
 		args = (self._paramId_,)
 		self.cursor = conn.cursor()
