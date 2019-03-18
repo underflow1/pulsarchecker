@@ -72,6 +72,7 @@ class controlledParameter():
 		self._parentPlaceTypeName = False
 		self._parentPlaceName = False
 		self._placeCoord = False
+		self._placeNameGroup = False
 		
 		self.controlledParamType = False # 1 - delta (volume), 2 - value (pressure)
 		self.controlledPlaceType = False # в дальнейшем для инцидентов на основе типа места (например, для баланса по кусту)
@@ -125,7 +126,8 @@ class controlledParameter():
 				parentplace.typ_id as _parentPlaceTypeId, \
 				parentplacetype."Name" as _parentPlaceTypeName, \
 				task."DateStart" as _paramStartDate, \
-				prop."ValueProp" as _placeCoord \
+				prop."ValueProp" as _placeCoord, \
+				paramres."NameGroup" as _placeNameGroup \
 		FROM "Tepl"."ParamResPlc_cnt" paramlist \
 		LEFT JOIN "Tepl"."ParametrResourse" paramres on paramlist."ParamRes_id" = paramres."ParamRes_id" \
 		LEFT JOIN "Tepl"."Places_cnt" place on paramlist.plc_id = place.plc_id \
@@ -145,8 +147,7 @@ class controlledParameter():
 			return False
 		else:
 			coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
-			if not query[12] == None:
-				self._placeCoord = coords.replace('_coords_', query[12])
+
 			self._paramTypeId = query[1]
 			self._paramName = query[2]
 			self._placeId = query[3]
@@ -158,7 +159,13 @@ class controlledParameter():
 			self._parentPlaceTypeId = query[9]
 			self._parentPlaceTypeName = query[10]
 			self._paramStartDate = query[11].replace(tzinfo=None)
-		
+			
+			if not query[12] == None:
+				self._placeCoord = coords.replace('_coords_', query[12])
+			else:
+				self._placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
+
+			self._placeNameGroup = query[13]
 			return True
 
 	def loadcontrolledParamType(self):
@@ -265,7 +272,10 @@ class controlledParameter():
 			'parentPlace': self._parentPlaceTypeName + ' ' + self._parentPlaceName,
 			'incidentType': lastIncidentType, 
 			'description':description,
-			'coordinates': self._placeCoord
+			'coordinates': self._placeCoord,
+			'lastArchiveData': self._lastArchiveData,
+			'placeNameGroup': self._placeNameGroup,
+			'_lastArchiveTime': self._lastArchiveTime
 			}
 		self.foundedIncidentsList.append(data)
 		#print(data)
@@ -288,9 +298,10 @@ class controlledParameter():
 			else:
 				range = getWeekDateRange(self._lastArchiveTime)
 				self.averageWeek = self.getAverageValue(range)
-				if not self.averageWeek:
-					self.dumpIncident(7)
-					return True
+				if not self.averageWeek == 0:
+					if not self.averageWeek:
+						self.dumpIncident(7)
+						return True
 				else:
 					if (self.averageWeek * 2) < self._lastArchiveData:
 						self.dumpIncident(2)
@@ -306,9 +317,10 @@ class controlledParameter():
 			else:
 				range = getHourDateRange(self._lastArchiveTime)
 				self.averageHour = self.getAverageValue(range)
-				if not self.averageHour:
-					self.dumpIncident(7)
-					return True
+				if not self.averageHour == 0:
+					if not self.averageHour:
+						self.dumpIncident(7)
+						return True
 				else:
 					if self.averageHour == 0:
 						self.dumpIncident(3)
@@ -393,8 +405,8 @@ class incidentOperations():
 		savedIncidents = []
 		if len(dump) > 0:
 			cursor = conn.cursor()
-			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap) \
-			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s); '
+			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 			for dumprecord in dump:
 				if not self.incidentExists(dumprecord):
 					if dumprecord['_lastArchiveTime'] == 'False':
@@ -410,7 +422,9 @@ class incidentOperations():
 					dumprecord.get('parentPlace'),
 					dumprecord.get('childPlace'),
 					dumprecord.get('description'),
-					dumprecord.get('coordinates')
+					dumprecord.get('coordinates'),
+					dumprecord.get('placeNameGroup'),
+					dumprecord.get('_lastArchiveData')
 					)
 					try:
 						cursor.execute(query, args)
