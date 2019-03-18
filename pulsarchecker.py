@@ -438,11 +438,11 @@ class email():
 			self.emailsubst[_parent][_child].append(params)
 
 		for parent in self.emailsubst:
-			print(parent)
+#			print(parent)
 			for child in self.emailsubst[parent]:
-				print('=> ' + child)
+#				print('=> ' + child)
 				for pr in self.emailsubst[parent][child]:
-					print('---> ' + pr[0],pr[1])
+					print('---> ' + child + ' ' + pr[0],pr[1])
 
 	def send(self):
 		if len(self.emailsubst) > 0:
