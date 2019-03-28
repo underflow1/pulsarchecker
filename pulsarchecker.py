@@ -11,7 +11,7 @@ pollhourinterval = 2 # интервал выхода на связь пульс�
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
 dirsep = os.path.sep
 folder = sys.path[0] + dirsep
-configfile = folder +'config.ini'
+configfile = folder + '..' + dirsep + 'config.ini'
 templatefile = folder +'email.html'
 
 def read_config(section):
@@ -287,7 +287,8 @@ class controlledParameter():
 		else:
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
 				self.dumpIncident(1)
-			return False
+			return True
+		return False
 		
 	def checkConsumptionUp(self): #2
 		if not self.initCompleted:
@@ -346,22 +347,26 @@ class controlledParameter():
 						return False
 
 	def getIncidents(self):
-		if not self.checkConnectionLost():
-			if self.controlledParamType == 1:
-				if not self.checkConsumptionUp():
-					if not self.checkConsumptionStale():
-						pass
-			if self.controlledParamType == 2:
-				if not self.checkValueDown():
-					pass
+		if self.checkConnectionLost():
 			return self.foundedIncidentsList
+		else:
+			if self.controlledParamType == 1:
+				if self.checkConsumptionUp():
+					return self.foundedIncidentsList
+				else:
+					if self.checkConsumptionStale():
+						return self.foundedIncidentsList
+			if self.controlledParamType == 2:
+				if self.checkValueDown():
+					return self.foundedIncidentsList
+		return self.foundedIncidentsList
 
 class incidentOperations():
 
 	def autoCloseOpenedIncidents(self):
 		a = 0
 		self.cursor = conn.cursor()
-		query = 'SELECT id, param_id, type FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
+		query = 'SELECT id, param_id, type FROM "Tepl"."Alert_cnt" WHERE status = \'active\' AND type = 1 '
 		try:
 			self.cursor.execute(query)
 			query = self.cursor.fetchall()
@@ -370,19 +375,19 @@ class incidentOperations():
 			return False
 		else:
 			for row in query:
-				if row[2] == 1:  # автозакрываем только невыходы на связь
-					cp = controlledParameter(row[1])
-					if not cp.checkConnectionLost():
-						query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
-						args = (row[0],)
-						try:
-							self.cursor.execute(query, args)
-						except Exception as e:
-							print(e)
-							conn.rollback()
-						else:
-							conn.commit()
-							a = a + 1
+				cp = controlledParameter(row[1])
+				cl = cp.checkConnectionLost()
+				if not cl:
+					query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
+					args = (row[0],)
+					try:
+						self.cursor.execute(query, args)
+					except Exception as e:
+						print(e)
+						conn.rollback()
+					else:
+						conn.commit()
+						a = a + 1
 			print('autoclosed ' + str(a))
 
 	def incidentExists(self,dumprecord):
