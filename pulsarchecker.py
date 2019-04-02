@@ -287,8 +287,8 @@ class controlledParameter():
 		else:
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
 				self.dumpIncident(1)
-			return True
-		return False
+			return False
+		return True
 		
 	def checkConsumptionUp(self): #2
 		if not self.initCompleted:
