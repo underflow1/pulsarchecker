@@ -87,6 +87,9 @@ class controlledParameter():
 			if not self.loadParameterMetadata():
 				self.dumpIncident(6)
 			else:
+				self.loadcontrolledPlaceType()
+				if self.controlledPlaceType == 1:
+					self.checkBalanceFailure()
 				if not self.loadcontrolledParamType():
 					self.dumpIncident(0)
 				else:
@@ -280,6 +283,25 @@ class controlledParameter():
 		self.foundedIncidentsList.append(data)
 		#print(data)
 		return data
+
+	def checkBalanceFailure(self):
+		if not self.initCompleted:
+			return False
+		else:
+			if self.controlledPlaceType == 1:
+				query = 'SELECT "Comment" FROM "Tepl"."PaternRep_cnt" WHERE pat_id = 6'
+				try:
+					self.cursor.execute(query)
+					query = self.cursor.fetchone()
+				except Exception as e:
+					print(e)
+					return False
+				if query:
+					print(query)
+		return False
+			
+
+
 
 	def checkConnectionLost(self): #1
 		if not self.initCompleted:
