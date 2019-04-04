@@ -557,7 +557,7 @@ class incidentOperations():
 			for row in query:
 				cp = controlledParameter(row[1])
 				cl = cp.checkConnectionLost()
-				if not cl:
+				if cl:
 					query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
 					args = (row[0],)
 					try:
