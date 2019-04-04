@@ -115,6 +115,20 @@ class controlledParameter():
 				return True
 			return False
 
+	def checkParameterExistsNew(self):
+		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = %s '
+		args = (self._paramId_,)
+		try:
+			self.cursor.execute(query, args)
+			query = self.cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+		else:
+			if query:
+				return {'success': True}
+			return {'success': False, 'error': False, 'dump': False}
+
 	def loadParameterMetadata(self):
 		query = '\
 		SELECT 	paramlist.prp_id as _paramId_, \
@@ -171,6 +185,78 @@ class controlledParameter():
 			self._placeNameGroup = query[13]
 			return True
 
+	def getParameterMetadataNew(self):
+		query = '\
+		SELECT 	paramlist.prp_id as _paramId_, \
+				paramlist."ParamRes_id" as _paramTypeId, \
+				paramres."Name" as _paramName, \
+				place.plc_id as _placeId, \
+				place."Name" as _placeName, \
+				place.typ_id as _placeTypeId, \
+				placetype."Name" as _placeTypeName, \
+				place.plc_id as _parentPlaceId, \
+				parentplace."Name" as _parentPlaceName, \
+				parentplace.typ_id as _parentPlaceTypeId, \
+				parentplacetype."Name" as _parentPlaceTypeName, \
+				task."DateStart" as _paramStartDate, \
+				prop."ValueProp" as _placeCoord, \
+				paramres."NameGroup" as _placeNameGroup \
+		FROM "Tepl"."ParamResPlc_cnt" paramlist \
+		LEFT JOIN "Tepl"."ParametrResourse" paramres on paramlist."ParamRes_id" = paramres."ParamRes_id" \
+		LEFT JOIN "Tepl"."Places_cnt" place on paramlist.plc_id = place.plc_id \
+		LEFT JOIN "Tepl"."PlaceTyp_cnt" placetype on place.typ_id = placetype.typ_id  \
+		LEFT JOIN "Tepl"."Places_cnt" parentplace on place.place_id = parentplace.plc_id \
+		LEFT JOIN "Tepl"."PlaceTyp_cnt" parentplacetype on parentplace.typ_id = parentplacetype.typ_id \
+		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
+		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id IN (72, 73, 74)) prop on place.plc_id = prop.plc_id \
+		WHERE paramlist.prp_id = %s'
+		args = (self._paramId_,)
+		self.cursor = conn.cursor()
+		try:
+			self.cursor.execute(query, args)
+			query = self.cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+		else:
+			if query:
+				coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
+				self._paramTypeId = query[1]
+				self._paramName = query[2]
+				self._placeId = query[3]
+				self._placeName = query[4]
+				self._placeTypeId = query[5]
+				self._placeTypeName = query[6]
+				self._parentPlaceId = query[7]
+				self._parentPlaceName = query[8]
+				self._parentPlaceTypeId = query[9]
+				self._parentPlaceTypeName = query[10]
+				self._paramStartDate = query[11].replace(tzinfo=None)
+				if not query[12] == None:
+					self._placeCoord = coords.replace('_coords_', query[12])
+					_placeCoord = coords.replace('_coords_', query[12])
+				else:
+					self._placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
+					_placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
+				self._placeNameGroup = query[13]
+				data = {
+					'_paramTypeId': query[1],
+					'_paramName': query[2],
+					'_placeId': query[3],
+					'_placeName': query[4],
+					'_placeTypeId': query[5],
+					'_placeTypeName': query[6],
+					'_parentPlaceId': query[7],
+					'_parentPlaceName': query[8],
+					'_parentPlaceTypeId': query[9],
+					'_parentPlaceTypeName': query[10],
+					'_paramStartDate': query[11].replace(tzinfo=None),
+					'_placeCoord': _placeCoord,
+					'_placeNameGroup': query[13]
+				}
+				return {'success': True, 'data': data}
+			return {'success': False, 'error': False, 'dump': 6, 'description': 'Отсутствуют метаданные параметра'}
+
 	def loadcontrolledParamType(self):
 		if self._paramTypeId in (1,):
 			self.controlledParamType = 1
@@ -180,11 +266,24 @@ class controlledParameter():
 			return True
 		return False
 
+	def getControlledParamTypeNew(self):
+		if self._paramTypeId in (1,):
+			return {'success': True, 'data': 1} # 1 - delta (volume)
+		if self._paramTypeId in (269, 308): 
+			return {'success': True, 'data': 2} # 2 - value (pressure)
+		return {'success': False, 'error': False, 'dump': 10, 'description': 'Данный тип параметра не контроллируется'}
+
 	def loadcontrolledPlaceType(self):
 		if self._placeTypeId in (20,):
 			self.controlledPlaceType = 1
 			return True
 		return False
+
+	def getControlledPlaceTypeNew(self):
+		if self._placeTypeId in (20,):
+			self.controlledPlaceType = 1 # Куст (для баланса)
+			return {'success': True, 'data': 1}
+		return {'success': False, 'error': False, 'dump': False, 'description': 'Объект не является кустом'}
 
 	def loadlastArchiveTime(self):
 		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
@@ -202,6 +301,20 @@ class controlledParameter():
 			else:
 				return False
 		
+	def getLastArchiveTimeExistsNew(self):
+		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
+		args = (self._paramId_,)
+		try:
+			self.cursor.execute(query, args)
+			query = self.cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+		else:	
+			if query[0]:
+				return {'success': True, 'data': query[0]}
+		return {'success': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
+
 	def loadlastArchiveData(self):
 		query = ' \
 		SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
@@ -223,6 +336,28 @@ class controlledParameter():
 					self._lastArchiveData = round(query[0],2)
 					return True
 			return False
+
+	def getLastArchiveDataExistsNew(self):
+		query = ' \
+		SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
+		WHERE pr_id = %s AND typ_arh = 1 \
+		AND "DateValue" = %s '
+		args = (self._paramId_,self._lastArchiveTime)
+		try:
+			self.cursor.execute(query, args)
+			query = self.cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+		else:	
+			if query:	
+				if self.controlledParamType == 1:
+					self._lastArchiveData = round(query[1],2) 
+					return {'success': True, 'data': round(query[1],2)}
+				if self.controlledParamType == 2: 
+					self._lastArchiveData = round(query[0],2)
+					return {'success': True, 'data': round(query[0],2)}
+			return {'success': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
 
 	def getAverageValue(self, range):
 		if range[1] - range[0] > timedelta(hours = 24):
@@ -247,6 +382,32 @@ class controlledParameter():
 			return False
 		else:	
 			return query[0]
+
+	def getAverageValueNew(self, range):
+		if range[1] - range[0] > timedelta(hours = 24):
+			rangetype = '1 day'
+		else:
+			rangetype = '1 hour'
+		for item in range:
+			item = str(item)
+		query = '\
+		DROP TABLE IF EXISTS date_range_tmp; \
+		CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
+		INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
+		SELECT * FROM date_range_tmp;\
+		SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
+		WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
+		args = (range[0], range[1], rangetype, self.controlledParamType, self._paramId_)
+		try:
+			self.cursor.execute(query, args)
+			query = self.cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+		else:	
+			if query:
+				return {'success': True, 'data': query[0]}
+			return {'success': False, 'error': False, 'dump': 7, 'description': 'Среднее значение не определено. Падение и повышение контроллировать невозможно.'} 
 
 	def dumpIncident(self,lastIncidentType):
 		description = 'НЕИЗВЕСТНЫЙ ИНЦИДЕНТ'
@@ -300,9 +461,6 @@ class controlledParameter():
 					print(query)
 		return False
 			
-
-
-
 	def checkConnectionLost(self): #1
 		if not self.initCompleted:
 			return False
@@ -493,7 +651,7 @@ class email():
 			recipients_emails = email_config['recipients_emails'].split(',')
 			msg = MIMEText(message, 'html', 'utf-8')
 			msg['Subject'] = Header('Новый инцидент.', 'utf-8')
-			msg['From'] = "Система мониторинга Пульсар <pulsar@ce.int>"
+			msg['From'] = "Система мониторинга <monitoring@rsks.su>"
 			msg['To'] = ", ".join(recipients_emails)
 			server = smtplib.SMTP(email_config['host'])
 			server.sendmail(msg['From'], recipients_emails, msg.as_string())
