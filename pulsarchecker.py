@@ -123,11 +123,11 @@ class controlledParameter():
 			query = self.cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
 		else:
 			if query:
-				return {'success': True}
-			return {'success': False, 'error': False, 'dump': False}
+				return {'result': True}
+			return {'result': False, 'error': False, 'dump': False}
 
 	def loadParameterMetadata(self):
 		query = '\
@@ -217,7 +217,7 @@ class controlledParameter():
 			query = self.cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
 		else:
 			if query:
 				coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
@@ -254,8 +254,8 @@ class controlledParameter():
 					'_placeCoord': _placeCoord,
 					'_placeNameGroup': query[13]
 				}
-				return {'success': True, 'data': data}
-			return {'success': False, 'error': False, 'dump': 6, 'description': 'Отсутствуют метаданные параметра'}
+				return {'result': True, 'data': data}
+			return {'result': False, 'error': False, 'dump': 6, 'description': 'Отсутствуют метаданные параметра'}
 
 	def loadcontrolledParamType(self):
 		if self._paramTypeId in (1,):
@@ -266,12 +266,12 @@ class controlledParameter():
 			return True
 		return False
 
-	def getControlledParamTypeNew(self):
+	def setControlledParamTypeNew(self):
 		if self._paramTypeId in (1,):
-			return {'success': True, 'data': 1} # 1 - delta (volume)
+			return {'result': True, 'data': 1} # 1 - delta (volume)
 		if self._paramTypeId in (269, 308): 
-			return {'success': True, 'data': 2} # 2 - value (pressure)
-		return {'success': False, 'error': False, 'dump': 10, 'description': 'Данный тип параметра не контроллируется'}
+			return {'result': True, 'data': 2} # 2 - value (pressure)
+		return {'result': False, 'error': False, 'dump': 10, 'description': 'Данный тип параметра не контроллируется'}
 
 	def loadcontrolledPlaceType(self):
 		if self._placeTypeId in (20,):
@@ -279,11 +279,11 @@ class controlledParameter():
 			return True
 		return False
 
-	def getControlledPlaceTypeNew(self):
+	def setControlledPlaceTypeNew(self):
 		if self._placeTypeId in (20,):
 			self.controlledPlaceType = 1 # Куст (для баланса)
-			return {'success': True, 'data': 1}
-		return {'success': False, 'error': False, 'dump': False, 'description': 'Объект не является кустом'}
+			return {'result': True, 'data': 1}
+		return {'result': False, 'error': False, 'dump': False, 'description': 'Объект не является кустом'}
 
 	def loadlastArchiveTime(self):
 		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
@@ -309,11 +309,11 @@ class controlledParameter():
 			query = self.cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
 		else:	
 			if query[0]:
-				return {'success': True, 'data': query[0]}
-		return {'success': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
+				return {'result': True, 'data': query[0]}
+		return {'result': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
 
 	def loadlastArchiveData(self):
 		query = ' \
@@ -348,16 +348,16 @@ class controlledParameter():
 			query = self.cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
 		else:	
 			if query:	
 				if self.controlledParamType == 1:
 					self._lastArchiveData = round(query[1],2) 
-					return {'success': True, 'data': round(query[1],2)}
+					return {'result': True, 'data': round(query[1],2)}
 				if self.controlledParamType == 2: 
 					self._lastArchiveData = round(query[0],2)
-					return {'success': True, 'data': round(query[0],2)}
-			return {'success': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
+					return {'result': True, 'data': round(query[0],2)}
+			return {'result': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
 
 	def getAverageValue(self, range):
 		if range[1] - range[0] > timedelta(hours = 24):
@@ -403,11 +403,11 @@ class controlledParameter():
 			query = self.cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
 		else:	
 			if query:
-				return {'success': True, 'data': query[0]}
-			return {'success': False, 'error': False, 'dump': 7, 'description': 'Среднее значение не определено. Падение и повышение контроллировать невозможно.'} 
+				return {'result': True, 'data': query[0]}
+			return {'result': False, 'error': False, 'dump': 7, 'description': 'Среднее значение не определено. Падение и повышение контроллировать невозможно.'} 
 
 	def dumpIncident(self,lastIncidentType):
 		description = 'НЕИЗВЕСТНЫЙ ИНЦИДЕНТ'
@@ -470,6 +470,14 @@ class controlledParameter():
 			return True
 		return False
 
+	def isConnectionLostNew(self): #1
+		if not self.initCompleted:
+			return {'result': False, 'error': True, 'description': 'Отсутствуют архивные данные.'} 
+		else:
+			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
+				self.dumpIncident(1)
+				return {'result': True, 'error': False, 'dump': 1, 'description': 'Прибор не вышел на связь в установленное время.'}
+		return {'result': False} 
 
 	def checkConsumptionUp(self): #2
 		if not self.initCompleted:
@@ -488,6 +496,25 @@ class controlledParameter():
 					if (self.averageWeek * 2) < self._lastArchiveData:
 						self.dumpIncident(2)
 						return True
+					return False
+
+	def isConsumptionUpNew(self): #2
+		if not self.initCompleted:
+			return {'result': False, 'error': True, 'description': 'Отсутствуют архивные данные.'} 
+		else:
+			if not (self._paramStartDate + timedelta(days = averageweekdays)) <= self._lastArchiveTime:
+				return {'result': False, 'error': True, 'description': "С начала сбора данных еще не прошло averageweekdays дней. Определить среднее значение невозможно."} 
+			else:
+				range = getWeekDateRange(self._lastArchiveTime)
+				self.averageWeek = self.getAverageValue(range)
+				if not self.averageWeek == 0:
+					if not self.averageWeek:
+						self.dumpIncident(7) ## ?
+						return {'result': False, 'error': True, 'description': "Среднее значение не определено. Падение и повышение контроллировать невозможно."} 
+				else:
+					if (self.averageWeek * 2) < self._lastArchiveData:
+						self.dumpIncident(2)
+						return {'result': True} 
 					return False
 
 	def checkConsumptionStale(self): #3
