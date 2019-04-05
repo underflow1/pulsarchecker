@@ -467,8 +467,8 @@ class controlledParameter():
 		else:
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
 				self.dumpIncident(1)
-			return False
-		return True
+			return True
+		return False
 		
 	def checkConsumptionUp(self): #2
 		if not self.initCompleted:
@@ -557,7 +557,7 @@ class incidentOperations():
 			for row in query:
 				cp = controlledParameter(row[1])
 				cl = cp.checkConnectionLost()
-				if cl:
+				if not cl:
 					query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
 					args = (row[0],)
 					try:
