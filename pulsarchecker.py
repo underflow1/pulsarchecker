@@ -469,7 +469,8 @@ class controlledParameter():
 				self.dumpIncident(1)
 			return True
 		return False
-		
+
+
 	def checkConsumptionUp(self): #2
 		if not self.initCompleted:
 			return False
