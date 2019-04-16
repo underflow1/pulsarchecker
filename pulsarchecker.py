@@ -559,7 +559,7 @@ class controlledParameter():
 			return self.foundedIncidentsList
 		else:
 			if self.controlledParamType == 1:
-				if self.checkConsumptionUp():
+				if self.checkConsumptionUp():	
 					return self.foundedIncidentsList
 				else:
 					if self.checkConsumptionStale():

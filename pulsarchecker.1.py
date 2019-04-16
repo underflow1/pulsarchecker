@@ -66,7 +66,7 @@ class resourceParameter:
 			self.initCompleted = True
 		else:
 			self.error = a['error']
-			self.description = a['description']
+			self.edescription = a['description']
 
 	def checkParameterExists(self):
 		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = %s '
@@ -77,10 +77,12 @@ class resourceParameter:
 		except Exception as e:
 			print(e)
 			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+			exit(0)
 		else:
 			if query:
-				return {'success': True, 'result': True}
-		return {'success': True, 'result': False}
+				if query[0] == self.param_id:
+					return {'success': True, 'result': True}
+			return {'success': False, 'error': True, 'description':'Такого параметра не существует'}
 
 	def getParameterMetadata(self):
 		query = '\
@@ -114,6 +116,7 @@ class resourceParameter:
 		except Exception as e:
 			print(e)
 			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+			exit(0)
 		else:
 			if query:
 				coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
@@ -137,7 +140,7 @@ class resourceParameter:
 					'placeNameGroup': query[13]
 				}
 				return {'success': True, 'result': data}
-			return {'success': True, 'result': None}
+			return {'success': False, 'error': True, 'description':'По данному параметру нет метаданных'}
 	
 	def defineParameterType(self):
 		if self.metadata['paramTypeId']:
@@ -178,15 +181,16 @@ class resourceParameter:
 class parameterIncidents(resourceParameter):
 	def __init__(self, id):
 		resourceParameter.__init__(self, id)
-		self.last = None
-		self.dataLoaded = False
-		a = self.getLastArchive()
-		if a['success'] and a['result']:
-			self.last = a['result']
-			self.dataLoaded = True
-		else:
-			self.error = a['error']
-			self.description = a['description']	
+		if self.initCompleted:
+			self.last = None
+			self.dataLoaded = False
+			a = self.getLastArchive()
+			if a['success'] and a['result']:
+				self.last = a['result']
+				self.dataLoaded = True
+			else:
+				self.error = a['error']
+				self.edescription = a['description']	
 
 	def getLastArchiveTime(self):
 		if self.initCompleted:
@@ -198,12 +202,13 @@ class parameterIncidents(resourceParameter):
 			except Exception as e:
 				print(e)
 				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+				exit(0)
 			else:	
 				if query[0]:
 					return {'success': True, 'result': query[0]}
 				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
 		else:
-			return {'success': False, 'error': self.error, 'description': self.dataLoaded}
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def getLastArchive(self):
 		if self.initCompleted:
@@ -221,6 +226,7 @@ class parameterIncidents(resourceParameter):
 				except Exception as e:
 					print(e)
 					return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+					exit(0)
 				else:	
 					if query[0]:
 						if self.parameterType == 1:
@@ -234,7 +240,7 @@ class parameterIncidents(resourceParameter):
 			else:
 				return {'success': False, 'error': a['error'], 'description': a['description'] }
 		else:
-			return {'success': False, 'error': self.error, 'description': self.dataLoaded}
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 	
 	def checkConnectionLost(self): #1
 		if self.dataLoaded:
@@ -242,37 +248,42 @@ class parameterIncidents(resourceParameter):
 				return {'success': True, 'result': True}
 			else:
 				return {'success': True, 'result': False}
-		return {'success': False, 'error': True, 'description': 'Последние данные не загружены'}
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 		
 	def getAverageValue(self, timerange):
-		if timerange[1] - timerange[0] > timedelta(hours = 24):
-			rangetype = '1 day'
+		if self.dataLoaded:
+			if timerange[1] - timerange[0] > timedelta(hours = 24):
+				rangetype = '1 day'
+			else:
+				rangetype = '1 hour'
+			for item in timerange:
+				item = str(item)
+			query = '\
+			DROP TABLE IF EXISTS date_range_tmp; \
+			CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
+			INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
+			SELECT * FROM date_range_tmp;\
+			SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
+			WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
+			args = (timerange[0], timerange[1], rangetype, self.parameterType, self.param_id)
+			try:
+				cursor.execute(query, args)
+				query = cursor.fetchone()
+			except Exception as e:
+				print(e)
+				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+				exit(0)
+			else:	
+				if query[0]:
+					return {'success': True, 'result': query[0]}
+				return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
 		else:
-			rangetype = '1 hour'
-		for item in timerange:
-			item = str(item)
-		query = '\
-		DROP TABLE IF EXISTS date_range_tmp; \
-		CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
-		INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
-		SELECT * FROM date_range_tmp;\
-		SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
-		WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
-		args = (timerange[0], timerange[1], rangetype, self.parameterType, self.param_id)
-		try:
-			cursor.execute(query, args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-		else:	
-			if query[0]:
-				return {'success': True, 'result': query[0]}
-			return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def checkConsumptionUp(self):
 		if self.dataLoaded:
-			if not (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)) <= self.last['time']:
+			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
 				range = getWeekDateRange(self.last['time'])
@@ -288,6 +299,81 @@ class parameterIncidents(resourceParameter):
 						return {'success': False, 'error': True, 'description': "Ошибка. Среднее значение имеет отрицательную величину" }
 				else:
 					return {'success': False, 'error': a['error'], 'description': a['description'] }
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def checkConsumptionStale(self):
+		if self.dataLoaded:
+			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
+			else:
+				range = getHourDateRange(self.last['time'])
+				a = self.getAverageValue(range)
+				if a['success']:
+					averageValue = a['result']
+					if averageValue == 0:
+						return {'success': True, 'result': True}
+					else:
+						return {'success': True, 'result': False}
+				else:
+					return {'success': False, 'error': a['error'], 'description': a['description'] }
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def checkValueDown(self):
+		if self.dataLoaded:
+			if not  self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
+			else:
+				range = getHourDateRange(self.last['time'])
+				a = self.getAverageValue(range)
+				if a['success']:
+					averageValue = a['result']
+					if (averageValue > self.last['value'] * 2):
+						return {'success': True, 'result': True}
+					else:
+						return {'success': True, 'result': False}
+				else:
+					return {'success': False, 'error': a['error'], 'description': a['description'] }					
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def getCurrentIncident(self):
+		data = self
+		if not self.initCompleted:
+			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+		else: 
+			if not self.dataLoaded:
+				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+			else:
+				inc = self.checkConnectionLost()
+				if (inc['success'] and inc['result']):
+					return {'success': True, 'result': {'incidentType': 1, 'description': 'Прибор не вышел на связь в установленное время.', 'self': data}}
+				else:
+					if self.parameterType == 1: # 1 - delta (volume)
+						inc = self.checkConsumptionUp()	
+						if (inc['success'] and inc['result']):
+							return {'success': True, 'result': {'incidentType': 2, 'description': 'Зафиксировано повышение расхода контроллируемого параметра.', 'self': data}}
+						if inc['success'] == False:
+							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+						else:
+							inc = self.checkConsumptionStale()
+							if (inc['success'] and inc['result']):
+								return {'success': True, 'result': {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': data}}
+							if inc['success'] == False:
+								return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+					if self.parameterType == 2: # 2 - value (pressure)
+						inc = self.checkConsumptionUp()
+						if (inc['success'] and inc['result']):
+							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
+						if inc['success'] == False:
+							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+
+class incidentHandler:
+	def saveIncident(self, incident):
+		pass
+
+
 
 
 #==================================
@@ -308,13 +394,7 @@ else:
 
 
 
-a = parameterIncidents(9)
-b = a.getLastArchiveTime()
-if b['success']:
-	c = b['result']
-	print(c)
-	d = a.getLastArchive()
-	if d['success']:
-		e = d['result']
-		print(e)
+a = parameterIncidents(17)
+b = a.getCurrentIncident()
+print(b)
 pass
