@@ -181,9 +181,9 @@ class resourceParameter:
 class parameterIncidents(resourceParameter):
 	def __init__(self, id):
 		resourceParameter.__init__(self, id)
+		self.last = None
+		self.dataLoaded = False
 		if self.initCompleted:
-			self.last = None
-			self.dataLoaded = False
 			a = self.getLastArchive()
 			if a['success'] and a['result']:
 				self.last = a['result']
@@ -372,9 +372,66 @@ class parameterIncidents(resourceParameter):
 class incidentHandler:
 	def saveIncident(self, incident):
 		pass
+		if len(incident) > 0:
+			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+			if incident.last['time'] == False:
+				d = date(2000, 1, 1)
+				t = time(00, 00)
+				incident.last['time'] = datetime.combine(d, t)
+			args = (
+			incident.self.last['time'],
+			incident.self.param_id,
+			incident.incidentType,
+			incident.self.metadata['placeName'],
+			incident.self.metadata['placeId'],
+			incident.self.metadata['parentPlaceTypeName'] + ' ' + incident.self.metadata['parentPlaceName'],
+			incident.self.metadata['placeTypeName'] + ' ' + incident.self.metadata['placeName'],			
+			incident.description,
+			incident.self.metadata['placeCoord'],
+			incident.self.metadata['placeNameGroup'],
+			incident.self.last['value']
+			)
+			try:
+				cursor.execute(query, args)
+			except Exception as e:
+				print(e)
+				conn.rollback()
+				return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
+			else:
+				conn.commit()
+				return {'success': True, 'result': cursor.lastrowid}
 
+	def closeIncident(self, incident_id, close_type):
+		if close_type == 1:
+			status = 'autoclosed'
+		else:
+			status = 'closed'
+		query = 'UPDATE "Tepl"."Alert_cnt" SET status = %s WHERE id = %s '
+		args = (status, incident_id)
+		try:
+			cursor.execute(query, args)
+		except Exception as e:
+			print(e)
+			conn.rollback()
+			return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
+		else:
+			conn.commit()
+			return {'success': True, 'result': cursor.lastrowid}
 
-
+	def getExistingIncident(self, param_id, incident_type):
+		query = 'SELECT id FROM "Tepl"."Alert_cnt" WHERE status = \'active\' and param_id = %s and type = %s'
+		args = (param_id, incident_type)
+		try:
+			cursor.execute(query, args)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				return {'success': True, 'result': query[0]}
+			return {'success': False, 'result': None}		
 
 #==================================
 db_config = read_config('database')
@@ -392,9 +449,19 @@ except psycopg2.OperationalError as e:
 else:
 	print('Connected!')
 
+savedIncidentCounter = 0
+parametersList = getParamCheckList()
+for param_id in parametersList:
+	pIncident = parameterIncidents(param_id)
+	iHandler = incidentHandler()
+	a = iHandler.getExistingIncident(param_id, 1)
+	if a['success'] and a['result']:
+		connectionLostIncident = 
 
-
-a = parameterIncidents(17)
-b = a.getCurrentIncident()
-print(b)
+	a = obj.getCurrentIncident()
+	if a['success']:
+		incident = a['result']
+		if incident['incidentType'] == 1:
+			
+		print(param_id, incident)
 pass
