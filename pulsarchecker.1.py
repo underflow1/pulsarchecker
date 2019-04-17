@@ -61,6 +61,8 @@ class resourceParameter:
 		self.placeType = None
 		self.parameterType = None
 		self.initCompleted = False
+		self.edescription = ''
+		self.error = None
 		a = self.loadStats()
 		if a['success'] and a['result']:
 			self.initCompleted = True
@@ -149,14 +151,14 @@ class resourceParameter:
 			if self.metadata['paramTypeId'] in (269, 308): 
 				return {'success': True, 'result': 2} # 2 - value (pressure)
 			return {'success': False, 'error': True, 'description': 'Тип данных не учитывается'} 
-		return {'success': False, 'error': True, 'description': 'Ошибка чтения метаданных. Тип параметра не определён' }
+		return {'success': False, 'error': True, 'description': 'Ошибка метаданных. Тип параметра не определён' }
 
 	def definePlaceType(self):
 		if self.metadata['placeTypeId']:
 			if self.metadata['placeTypeId'] in (20,):
 				return {'success': True, 'result': 1} # 1 = Куст (для баланса)
 			return {'success': True, 'result': None}
-		return {'success': False, 'error': True, 'description': 'Ошибка чтения метаданных. Тип объекта (места) не определён'}
+		return {'success': False, 'error': True, 'description': 'Ошибка метаданных. Тип объекта (места) не определён'}
 
 	def loadStats(self):
 		ex = self.checkParameterExists()
@@ -181,7 +183,7 @@ class resourceParameter:
 class parameterIncidents(resourceParameter):
 	def __init__(self, id):
 		resourceParameter.__init__(self, id)
-		self.last = None
+		self.last = {}
 		self.dataLoaded = False
 		if self.initCompleted:
 			a = self.getLastArchive()
@@ -341,10 +343,10 @@ class parameterIncidents(resourceParameter):
 	def getCurrentIncident(self):
 		data = self
 		if not self.initCompleted:
-			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
 		else: 
 			if not self.dataLoaded:
-				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
 			else:
 				inc = self.checkConnectionLost()
 				if (inc['success'] and inc['result']):
@@ -355,19 +357,21 @@ class parameterIncidents(resourceParameter):
 						if (inc['success'] and inc['result']):
 							return {'success': True, 'result': {'incidentType': 2, 'description': 'Зафиксировано повышение расхода контроллируемого параметра.', 'self': data}}
 						if inc['success'] == False:
-							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
 						else:
 							inc = self.checkConsumptionStale()
 							if (inc['success'] and inc['result']):
 								return {'success': True, 'result': {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': data}}
 							if inc['success'] == False:
-								return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+								return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+	
 					if self.parameterType == 2: # 2 - value (pressure)
 						inc = self.checkConsumptionUp()
 						if (inc['success'] and inc['result']):
 							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
 						if inc['success'] == False:
-							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован', 'self': data}}
+							return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+		return {'success': True, 'result': None}
 
 class incidentHandler:
 	def saveIncident(self, incident):
@@ -375,22 +379,22 @@ class incidentHandler:
 		if len(incident) > 0:
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-			if incident.last['time'] == False:
+			if not incident['self'].last.get('time'):
 				d = date(2000, 1, 1)
 				t = time(00, 00)
-				incident.last['time'] = datetime.combine(d, t)
+				incident['self'].last['time'] = datetime.combine(d, t)
 			args = (
-			incident.self.last['time'],
-			incident.self.param_id,
-			incident.incidentType,
-			incident.self.metadata['placeName'],
-			incident.self.metadata['placeId'],
-			incident.self.metadata['parentPlaceTypeName'] + ' ' + incident.self.metadata['parentPlaceName'],
-			incident.self.metadata['placeTypeName'] + ' ' + incident.self.metadata['placeName'],			
-			incident.description,
-			incident.self.metadata['placeCoord'],
-			incident.self.metadata['placeNameGroup'],
-			incident.self.last['value']
+			incident['self'].last['time'],
+			incident['self'].param_id,
+			incident['incidentType'],
+			incident['self'].metadata['paramName'],
+			incident['self'].metadata['placeId'],
+			incident['self'].metadata['parentPlaceTypeName'] + ' ' + incident['self'].metadata['parentPlaceName'],
+			incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName'],			
+			incident['description'] + ' ' + incident['self'].edescription,
+			incident['self'].metadata['placeCoord'],
+			incident['self'].metadata['placeNameGroup'],
+			incident['self'].last.get('value')
 			)
 			try:
 				cursor.execute(query, args)
@@ -400,7 +404,7 @@ class incidentHandler:
 				return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
 			else:
 				conn.commit()
-				return {'success': True, 'result': cursor.lastrowid}
+				return {'success': True, 'result': True}
 
 	def closeIncident(self, incident_id, close_type):
 		if close_type == 1:
@@ -433,6 +437,45 @@ class incidentHandler:
 				return {'success': True, 'result': query[0]}
 			return {'success': False, 'result': None}		
 
+def structureIncidents(incidents):
+	emailsubst = {}
+	for incident in incidents:
+		_parent = incident['self'].metadata['parentPlaceTypeName'] + ' ' + incident['self'].metadata['parentPlaceName']
+		if _parent not in emailsubst:
+			emailsubst[_parent] = {}
+		_child = incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName']
+		if _child not in emailsubst[_parent]:
+			emailsubst[_parent][_child] = []
+		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
+		emailsubst[_parent][_child].append(params)
+
+#	for parent in emailsubst:
+##			print(parent)
+#		for child in emailsubst[parent]:
+##				print('=> ' + child)
+#			for pr in emailsubst[parent][child]:
+#				print('---> ' + child + ' ' + pr[0],pr[1])
+	return emailsubst
+
+def fillEmailTemplate(emailsubst):
+	if len(emailsubst) > 0:
+		html = open(templatefile).read()
+		template = Template(html)
+		message = template.render(subst=emailsubst)
+		return message
+
+def sendIncidentsNotice(message):
+		recipients_emails = email_config['recipients_emails'].split(',')
+		msg = MIMEText(message, 'html', 'utf-8')
+		msg['Subject'] = Header('Новый инцидент.', 'utf-8')
+		msg['From'] = "Система мониторинга <monitoring@rsks.su>"
+		msg['To'] = ", ".join(recipients_emails)
+		server = smtplib.SMTP(email_config['host'])
+		server.sendmail(msg['From'], recipients_emails, msg.as_string())
+		server.quit()
+
+
+
 #==================================
 db_config = read_config('database')
 email_config = read_config('email')
@@ -450,18 +493,47 @@ else:
 	print('Connected!')
 
 savedIncidentCounter = 0
+autoclosedIncidentCounter = 0
+savedincidents = []
 parametersList = getParamCheckList()
 for param_id in parametersList:
-	pIncident = parameterIncidents(param_id)
 	iHandler = incidentHandler()
+	# проверка наличия открытого инцидента "не выход на связь"
 	a = iHandler.getExistingIncident(param_id, 1)
 	if a['success'] and a['result']:
-		connectionLostIncident = 
-
-	a = obj.getCurrentIncident()
+		lostConnectionIncident = a['result']
+	else:
+		lostConnectionIncident = None
+	# проверка и создание новых инцидентов
+	pIncident = parameterIncidents(param_id)
+	a = pIncident.getCurrentIncident()
 	if a['success']:
-		incident = a['result']
-		if incident['incidentType'] == 1:
-			
-		print(param_id, incident)
+		if a['result']:
+			incident = a['result']
+			a = iHandler.getExistingIncident(param_id, incident['incidentType'])
+			if not (a['success'] and a['result']):
+				a = iHandler.saveIncident(incident)
+				if a['success'] and a['result']:
+					savedIncidentCounter += 1
+					savedincidents.append(incident)
+		else: 
+			incident = None
+	# автозакрытие "не выход на связь"
+	if lostConnectionIncident:
+		if incident:
+			if incident['incidentType'] > 1:
+				iHandler.closeIncident(lostConnectionIncident, 1)
+				autoclosedIncidentCounter += 1
+		else:
+			iHandler.closeIncident(lostConnectionIncident, 1)
+			autoclosedIncidentCounter += 1
+print('Новых инцидентов: ' + str(savedIncidentCounter))
+print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
+
+if savedincidents:
+	emailsubst = structureIncidents(savedincidents)
+	if emailsubst:
+		message = fillEmailTemplate(emailsubst)
+		if message:
+			sendIncidentsNotice(message)
 pass
