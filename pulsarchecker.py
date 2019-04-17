@@ -54,82 +54,39 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
-class controlledParameter():
-	def __init__(self, id):
-		self.cursor = conn.cursor()
-		self.foundedIncidentsList = []
-		self._paramId_ = id				# значения начинаюищеся с подчеркивания - те что мы берем из базы
-		self._paramTypeId = False		# значения без подчеркивания - вычисленные в ходе инициализации
-		self._paramName = False
-		self._paramStartDate = False
-		self._paramNameGroup = False
-		self._placeId = False
-		self._placeTypeId = False
-		self._placeTypeName = False
-		self._placeName = False
-		self._parentPlaceId = False
-		self._parentPlaceTypeId = False
-		self._parentPlaceTypeName = False
-		self._parentPlaceName = False
-		self._placeCoord = False
-		self._placeNameGroup = False
-		
-		self.controlledParamType = False # 1 - delta (volume), 2 - value (pressure)
-		self.controlledPlaceType = False # в дальнейшем для инцидентов на основе типа места (например, для баланса по кусту)
-		self._lastArchiveTime = False
-		self._lastArchiveData = False
-
-		self.averageWeek = False
-		self.averageHour = False
+class resourceParameter:
+	def __init__(self, param_id):
+		self.param_id = param_id
+		self.metadata = None
+		self.placeType = None
+		self.parameterType = None
 		self.initCompleted = False
+		self.edescription = ''
+		self.error = None
+		a = self.loadStats()
+		if a['success'] and a['result']:
+			self.initCompleted = True
+		else:
+			self.error = a['error']
+			self.edescription = a['description']
 
-		if self.checkParameterExists():
-			if not self.loadParameterMetadata():
-				self.dumpIncident(6)
-			else:
-				self.loadcontrolledPlaceType()
-				if self.controlledPlaceType == 1:
-					self.checkBalanceFailure()
-				if not self.loadcontrolledParamType():
-					self.dumpIncident(0)
-				else:
-					if not self.loadlastArchiveTime():
-						self.dumpIncident(5)
-					else:
-						if not self.loadlastArchiveData():
-							self.dumpIncident(5)
-						else:
-							self.initCompleted = True
-	
 	def checkParameterExists(self):
 		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = %s '
-		args = (self._paramId_,)
+		args = (self.param_id,)
 		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
+			cursor.execute(query, args)
+			query = cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return False
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+			exit(0)
 		else:
 			if query:
-				return True
-			return False
+				if query[0] == self.param_id:
+					return {'success': True, 'result': True}
+			return {'success': False, 'error': True, 'description':'Такого параметра не существует'}
 
-	def checkParameterExistsNew(self):
-		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = %s '
-		args = (self._paramId_,)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-		else:
-			if query:
-				return {'result': True}
-			return {'result': False, 'error': False, 'dump': False}
-
-	def loadParameterMetadata(self):
+	def getParameterMetadata(self):
 		query = '\
 		SELECT 	paramlist.prp_id as _paramId_, \
 				paramlist."ParamRes_id" as _paramTypeId, \
@@ -154,538 +111,359 @@ class controlledParameter():
 		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
 		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id IN (72, 73, 74)) prop on place.plc_id = prop.plc_id \
 		WHERE paramlist.prp_id = %s'
-		args = (self._paramId_,)
-		self.cursor = conn.cursor()
+		args = (self.param_id,)
 		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
+			cursor.execute(query, args)
+			query = cursor.fetchone()
 		except Exception as e:
 			print(e)
-			return False
-		else:
-			coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
-
-			self._paramTypeId = query[1]
-			self._paramName = query[2]
-			self._placeId = query[3]
-			self._placeName = query[4]
-			self._placeTypeId = query[5]
-			self._placeTypeName = query[6]
-			self._parentPlaceId = query[7]
-			self._parentPlaceName = query[8]
-			self._parentPlaceTypeId = query[9]
-			self._parentPlaceTypeName = query[10]
-			self._paramStartDate = query[11].replace(tzinfo=None)
-			
-			if not query[12] == None:
-				self._placeCoord = coords.replace('_coords_', query[12])
-			else:
-				self._placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
-
-			self._placeNameGroup = query[13]
-			return True
-
-	def getParameterMetadataNew(self):
-		query = '\
-		SELECT 	paramlist.prp_id as _paramId_, \
-				paramlist."ParamRes_id" as _paramTypeId, \
-				paramres."Name" as _paramName, \
-				place.plc_id as _placeId, \
-				place."Name" as _placeName, \
-				place.typ_id as _placeTypeId, \
-				placetype."Name" as _placeTypeName, \
-				place.plc_id as _parentPlaceId, \
-				parentplace."Name" as _parentPlaceName, \
-				parentplace.typ_id as _parentPlaceTypeId, \
-				parentplacetype."Name" as _parentPlaceTypeName, \
-				task."DateStart" as _paramStartDate, \
-				prop."ValueProp" as _placeCoord, \
-				paramres."NameGroup" as _placeNameGroup \
-		FROM "Tepl"."ParamResPlc_cnt" paramlist \
-		LEFT JOIN "Tepl"."ParametrResourse" paramres on paramlist."ParamRes_id" = paramres."ParamRes_id" \
-		LEFT JOIN "Tepl"."Places_cnt" place on paramlist.plc_id = place.plc_id \
-		LEFT JOIN "Tepl"."PlaceTyp_cnt" placetype on place.typ_id = placetype.typ_id  \
-		LEFT JOIN "Tepl"."Places_cnt" parentplace on place.place_id = parentplace.plc_id \
-		LEFT JOIN "Tepl"."PlaceTyp_cnt" parentplacetype on parentplace.typ_id = parentplacetype.typ_id \
-		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
-		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id IN (72, 73, 74)) prop on place.plc_id = prop.plc_id \
-		WHERE paramlist.prp_id = %s'
-		args = (self._paramId_,)
-		self.cursor = conn.cursor()
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+			exit(0)
 		else:
 			if query:
 				coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
-				self._paramTypeId = query[1]
-				self._paramName = query[2]
-				self._placeId = query[3]
-				self._placeName = query[4]
-				self._placeTypeId = query[5]
-				self._placeTypeName = query[6]
-				self._parentPlaceId = query[7]
-				self._parentPlaceName = query[8]
-				self._parentPlaceTypeId = query[9]
-				self._parentPlaceTypeName = query[10]
-				self._paramStartDate = query[11].replace(tzinfo=None)
 				if not query[12] == None:
-					self._placeCoord = coords.replace('_coords_', query[12])
-					_placeCoord = coords.replace('_coords_', query[12])
+					placeCoord = coords.replace('_coords_', query[12])
 				else:
-					self._placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
-					_placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
-				self._placeNameGroup = query[13]
+					placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
 				data = {
-					'_paramTypeId': query[1],
-					'_paramName': query[2],
-					'_placeId': query[3],
-					'_placeName': query[4],
-					'_placeTypeId': query[5],
-					'_placeTypeName': query[6],
-					'_parentPlaceId': query[7],
-					'_parentPlaceName': query[8],
-					'_parentPlaceTypeId': query[9],
-					'_parentPlaceTypeName': query[10],
-					'_paramStartDate': query[11].replace(tzinfo=None),
-					'_placeCoord': _placeCoord,
-					'_placeNameGroup': query[13]
+					'paramTypeId': query[1],
+					'paramName': query[2],
+					'placeId': query[3],
+					'placeName': query[4],
+					'placeTypeId': query[5],
+					'placeTypeName': query[6],
+					'parentPlaceId': query[7],
+					'parentPlaceName': query[8],
+					'parentPlaceTypeId': query[9],
+					'parentPlaceTypeName': query[10],
+					'paramStartDate': query[11].replace(tzinfo=None),
+					'placeCoord': placeCoord,
+					'placeNameGroup': query[13]
 				}
-				return {'result': True, 'data': data}
-			return {'result': False, 'error': False, 'dump': 6, 'description': 'Отсутствуют метаданные параметра'}
+				return {'success': True, 'result': data}
+			return {'success': False, 'error': True, 'description':'По данному параметру нет метаданных'}
+	
+	def defineParameterType(self):
+		if self.metadata['paramTypeId']:
+			if self.metadata['paramTypeId'] in (1,):
+				return {'success': True, 'result': 1} # 1 - delta (volume)
+			if self.metadata['paramTypeId'] in (269, 308): 
+				return {'success': True, 'result': 2} # 2 - value (pressure)
+			return {'success': False, 'error': True, 'description': 'Тип данных не учитывается'} 
+		return {'success': False, 'error': True, 'description': 'Ошибка метаданных. Тип параметра не определён' }
 
-	def loadcontrolledParamType(self):
-		if self._paramTypeId in (1,):
-			self.controlledParamType = 1
-			return True
-		if self._paramTypeId in (269, 308): 
-			self.controlledParamType = 2
-			return True
-		return False
+	def definePlaceType(self):
+		if self.metadata['placeTypeId']:
+			if self.metadata['placeTypeId'] in (20,):
+				return {'success': True, 'result': 1} # 1 = Куст (для баланса)
+			return {'success': True, 'result': None}
+		return {'success': False, 'error': True, 'description': 'Ошибка метаданных. Тип объекта (места) не определён'}
 
-	def setControlledParamTypeNew(self):
-		if self._paramTypeId in (1,):
-			return {'result': True, 'data': 1} # 1 - delta (volume)
-		if self._paramTypeId in (269, 308): 
-			return {'result': True, 'data': 2} # 2 - value (pressure)
-		return {'result': False, 'error': False, 'dump': 10, 'description': 'Данный тип параметра не контроллируется'}
-
-	def loadcontrolledPlaceType(self):
-		if self._placeTypeId in (20,):
-			self.controlledPlaceType = 1
-			return True
-		return False
-
-	def setControlledPlaceTypeNew(self):
-		if self._placeTypeId in (20,):
-			self.controlledPlaceType = 1 # Куст (для баланса)
-			return {'result': True, 'data': 1}
-		return {'result': False, 'error': False, 'dump': False, 'description': 'Объект не является кустом'}
-
-	def loadlastArchiveTime(self):
-		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
-		args = (self._paramId_,)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return False
-		else:	
-			if query[0]:
-				self._lastArchiveTime = query[0]	
-				return True
+	def loadStats(self):
+		ex = self.checkParameterExists()
+		if ex['success'] and ex['result']:
+			pm = self.getParameterMetadata()
+			if pm['success'] and pm['result']:
+				self.metadata = pm['result']
+				pt = self.defineParameterType()
+				if pt['success'] and pt['result']:
+					self.parameterType = pt['result']
+					plt = self.definePlaceType()
+					if plt['success'] and plt['result']:
+						self.placeType = plt['result']
+					return {'success': True, 'result': True}
+				else:
+					return {'success': False, 'error': pt['error'], 'description': pt['description']}
 			else:
-				return False
-		
-	def getLastArchiveTimeExistsNew(self):
-		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
-		args = (self._paramId_,)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-		else:	
-			if query[0]:
-				return {'result': True, 'data': query[0]}
-		return {'result': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
-
-	def loadlastArchiveData(self):
-		query = ' \
-		SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
-		WHERE pr_id = %s AND typ_arh = 1 \
-		AND "DateValue" = %s '
-		args = (self._paramId_,self._lastArchiveTime)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return False
-		else:	
-			if query:	
-				if self.controlledParamType == 1:
-					self._lastArchiveData = round(query[1],2) 
-					return True
-				if self.controlledParamType == 2: 
-					self._lastArchiveData = round(query[0],2)
-					return True
-			return False
-
-	def getLastArchiveDataExistsNew(self):
-		query = ' \
-		SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
-		WHERE pr_id = %s AND typ_arh = 1 \
-		AND "DateValue" = %s '
-		args = (self._paramId_,self._lastArchiveTime)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-		else:	
-			if query:	
-				if self.controlledParamType == 1:
-					self._lastArchiveData = round(query[1],2) 
-					return {'result': True, 'data': round(query[1],2)}
-				if self.controlledParamType == 2: 
-					self._lastArchiveData = round(query[0],2)
-					return {'result': True, 'data': round(query[0],2)}
-			return {'result': False, 'error': False, 'dump': 5, 'description': 'Отсутствуют архивные данные'}
-
-	def getAverageValue(self, range):
-		if range[1] - range[0] > timedelta(hours = 24):
-			rangetype = '1 day'
+				return {'success': False, 'error': pm['error'], 'description': pm['description']}					
 		else:
-			rangetype = '1 hour'
-		for item in range:
-			item = str(item)
-		query = '\
-		DROP TABLE IF EXISTS date_range_tmp; \
-		CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
-		INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
-		SELECT * FROM date_range_tmp;\
-		SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
-		WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
-		args = (range[0], range[1], rangetype, self.controlledParamType, self._paramId_)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return False
-		else:	
-			return query[0]
+			return {'success': False, 'error': ex['error'], 'description': ex['description']}				
 
-	def getAverageValueNew(self, range):
-		if range[1] - range[0] > timedelta(hours = 24):
-			rangetype = '1 day'
+class parameterIncidents(resourceParameter):
+	def __init__(self, id):
+		resourceParameter.__init__(self, id)
+		self.last = {}
+		self.dataLoaded = False
+		if self.initCompleted:
+			a = self.getLastArchive()
+			if a['success'] and a['result']:
+				self.last = a['result']
+				self.dataLoaded = True
+			else:
+				self.error = a['error']
+				self.edescription = a['description']	
+
+	def getLastArchiveTime(self):
+		if self.initCompleted:
+			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
+			args = (self.param_id,)
+			try:
+				cursor.execute(query, args)
+				query = cursor.fetchone()
+			except Exception as e:
+				print(e)
+				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+				exit(0)
+			else:	
+				if query[0]:
+					return {'success': True, 'result': query[0]}
+				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
 		else:
-			rangetype = '1 hour'
-		for item in range:
-			item = str(item)
-		query = '\
-		DROP TABLE IF EXISTS date_range_tmp; \
-		CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
-		INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
-		SELECT * FROM date_range_tmp;\
-		SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
-		WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
-		args = (range[0], range[1], rangetype, self.controlledParamType, self._paramId_)
-		try:
-			self.cursor.execute(query, args)
-			query = self.cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'result': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-		else:	
-			if query:
-				return {'result': True, 'data': query[0]}
-			return {'result': False, 'error': False, 'dump': 7, 'description': 'Среднее значение не определено. Падение и повышение контроллировать невозможно.'} 
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 
-	def dumpIncident(self,lastIncidentType):
-		description = 'НЕИЗВЕСТНЫЙ ИНЦИДЕНТ'
-		if lastIncidentType == 0:
-			description = 'Данный тип параметра не контроллируется'
-		if lastIncidentType == 1:
-			description = 'Прибор не вышел на связь в установленное время'
-		if lastIncidentType == 2:
-			description = 'Зафиксировано повышение контроллируемого параметра более 100%'
-		if lastIncidentType == 3:
-			description = 'Зафиксировано отсутствие расхода'
-		if lastIncidentType == 4:
-			description = 'Зафиксировано падение контроллируемого параметра более 50%'									
-		if lastIncidentType == 5:
-			description = 'Отсутствуют архивные данные'			
-		if lastIncidentType == 6:
-			description = 'Отсутствуют метаданные параметра'	
-		if lastIncidentType == 7:
-			description = 'среднее значение не определено. Падение и повышение контроллировать невозможно!'	
-		data = {
-			'_lastArchiveTime':str(self._lastArchiveTime), 
-			'_paramId_': self._paramId_, 
-			'_paramName': self._paramName, 
-			'_placeId': self._placeId, 
-			'childPlace':  self._placeTypeName + ' ' + self._placeName,
-			'parentPlace': self._parentPlaceTypeName + ' ' + self._parentPlaceName,
-			'incidentType': lastIncidentType, 
-			'description':description,
-			'coordinates': self._placeCoord,
-			'lastArchiveData': self._lastArchiveData,
-			'placeNameGroup': self._placeNameGroup,
-			'_lastArchiveTime': self._lastArchiveTime
-			}
-		self.foundedIncidentsList.append(data)
-		#print(data)
-		return data
-
-	def checkBalanceFailure(self):
-		if not self.initCompleted:
-			return False
-		else:
-			if self.controlledPlaceType == 1:
-				query = 'SELECT "Comment" FROM "Tepl"."PaternRep_cnt" WHERE pat_id = 6'
+	def getLastArchive(self):
+		if self.initCompleted:
+			query = ' \
+			SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
+			WHERE pr_id = %s AND typ_arh = 1 \
+			AND "DateValue" = %s '
+			a = self.getLastArchiveTime()
+			if a['success']:
+				lastArchiveTime = a['result']
+				args = (self.param_id, lastArchiveTime)
 				try:
-					self.cursor.execute(query)
-					query = self.cursor.fetchone()
+					cursor.execute(query, args)
+					query = cursor.fetchone()
 				except Exception as e:
 					print(e)
-					return False
-				if query:
-					print(query)
-		return False
-			
+					return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+					exit(0)
+				else:	
+					if query[0]:
+						if self.parameterType == 1:
+							#self.lastArchiveData = round(query[1],2) 
+							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query[1],2)}}
+						if self.parameterType == 2: 
+							#self.lastArchiveData = round(query[0],2)
+							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query[0],2)}}
+						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
+					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
+			else:
+				return {'success': False, 'error': a['error'], 'description': a['description'] }
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+	
 	def checkConnectionLost(self): #1
-		if not self.initCompleted:
-			return False
-		else:
-			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
-				self.dumpIncident(1)
-			return True
-		return False
-
-	def isConnectionLostNew(self): #1
-		if not self.initCompleted:
-			return {'result': False, 'error': True, 'description': 'Отсутствуют архивные данные.'} 
-		else:
-			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self._lastArchiveTime:
-				self.dumpIncident(1)
-				return {'result': True, 'error': False, 'dump': 1, 'description': 'Прибор не вышел на связь в установленное время.'}
-		return {'result': False} 
-
-	def checkConsumptionUp(self): #2
-		if not self.initCompleted:
-			return False
-		else:
-			if not (self._paramStartDate + timedelta(days = averageweekdays)) <= self._lastArchiveTime:
-				return False
+		if self.dataLoaded:
+			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self.last['time']:
+				return {'success': True, 'result': True}
 			else:
-				range = getWeekDateRange(self._lastArchiveTime)
-				self.averageWeek = self.getAverageValue(range)
-				if not self.averageWeek == 0:
-					if not self.averageWeek:
-						self.dumpIncident(7)
-						return True
-				else:
-					if (self.averageWeek * 2) < self._lastArchiveData:
-						self.dumpIncident(2)
-						return True
-					return False
-
-	def isConsumptionUpNew(self): #2
-		if not self.initCompleted:
-			return {'result': False, 'error': True, 'description': 'Отсутствуют архивные данные.'} 
+				return {'success': True, 'result': False}
 		else:
-			if not (self._paramStartDate + timedelta(days = averageweekdays)) <= self._lastArchiveTime:
-				return {'result': False, 'error': True, 'description': "С начала сбора данных еще не прошло averageweekdays дней. Определить среднее значение невозможно."} 
-			else:
-				range = getWeekDateRange(self._lastArchiveTime)
-				self.averageWeek = self.getAverageValue(range)
-				if not self.averageWeek == 0:
-					if not self.averageWeek:
-						self.dumpIncident(7) ## ?
-						return {'result': False, 'error': True, 'description': "Среднее значение не определено. Падение и повышение контроллировать невозможно."} 
-				else:
-					if (self.averageWeek * 2) < self._lastArchiveData:
-						self.dumpIncident(2)
-						return {'result': True} 
-					return False
-
-	def checkConsumptionStale(self): #3
-		if not self.initCompleted:
-			return False
-		else:
-			if not (self._paramStartDate + timedelta(hours = pollhourinterval)) <= self._lastArchiveTime:
-				return False
-			else:
-				range = getHourDateRange(self._lastArchiveTime)
-				self.averageHour = self.getAverageValue(range)
-				if not self.averageHour == 0:
-					if not self.averageHour:
-						self.dumpIncident(7)
-						return True
-				else:
-					if self.averageHour == 0:
-						self.dumpIncident(3)
-						return True
-					return False
-
-	def checkValueDown(self): #4
-		if not self.initCompleted:
-			return False
-		else:
-			if not (self._paramStartDate + timedelta(hours = pollhourinterval)) <= self._lastArchiveTime:
-				return False
-			else:
-				range = getHourDateRange(self._lastArchiveTime)
-				self.averageHour = self.getAverageValue(range)
-				if not self.averageHour:
-					self.dumpIncident(7)
-				else:
-					if (self.averageHour >  self._lastArchiveData * 2):
-						self.dumpIncident(4)
-						return True
-					else:
-						return False
-
-	def getIncidents(self):
-		if self.checkConnectionLost():
-			return self.foundedIncidentsList
-		else:
-			if self.controlledParamType == 1:
-				if self.checkConsumptionUp():	
-					return self.foundedIncidentsList
-				else:
-					if self.checkConsumptionStale():
-						return self.foundedIncidentsList
-			if self.controlledParamType == 2:
-				if self.checkValueDown():
-					return self.foundedIncidentsList
-		return self.foundedIncidentsList
-
-class incidentOperations():
-
-	def autoCloseOpenedIncidents(self):
-		a = 0
-		self.cursor = conn.cursor()
-		query = 'SELECT id, param_id, type FROM "Tepl"."Alert_cnt" WHERE status = \'active\' AND type = 1 '
-		try:
-			self.cursor.execute(query)
-			query = self.cursor.fetchall()
-		except Exception as e:
-			print(e)
-			return False
-		else:
-			for row in query:
-				cp = controlledParameter(row[1])
-				cl = cp.checkConnectionLost()
-				if not cl:
-					query = 'UPDATE "Tepl"."Alert_cnt" SET status = \'autoclosed\' WHERE id = %s '
-					args = (row[0],)
-					try:
-						self.cursor.execute(query, args)
-					except Exception as e:
-						print(e)
-						conn.rollback()
-					else:
-						conn.commit()
-						a = a + 1
-			print('autoclosed ' + str(a))
-
-	def incidentExists(self,dumprecord):
-		cursor = conn.cursor()
-		query = 'SELECT param_id, type FROM "Tepl"."Alert_cnt" WHERE param_id = %s AND type = %s AND status = \'active\' '
-		args = (dumprecord['_paramId_'], dumprecord['incidentType'])
-		try:
-			cursor.execute(query, args)
-			query = cursor.fetchall()
-		except Exception as e:
-			print(e)
-			return False
-		else:
-			if len(query) > 0:
-				return True
-		return False
+			return {'success': False, 'error': self.error, 'description': self.edescription}
 		
-	def saveIncidents(self, dump):
-		a = 0
-		savedIncidents = []
-		if len(dump) > 0:
-			cursor = conn.cursor()
+	def getAverageValue(self, timerange):
+		if self.dataLoaded:
+			if timerange[1] - timerange[0] > timedelta(hours = 24):
+				rangetype = '1 day'
+			else:
+				rangetype = '1 hour'
+			for item in timerange:
+				item = str(item)
+			query = '\
+			DROP TABLE IF EXISTS date_range_tmp; \
+			CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
+			INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
+			SELECT * FROM date_range_tmp;\
+			SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
+			WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
+			args = (timerange[0], timerange[1], rangetype, self.parameterType, self.param_id)
+			try:
+				cursor.execute(query, args)
+				query = cursor.fetchone()
+			except Exception as e:
+				print(e)
+				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
+				exit(0)
+			else:	
+				if query[0]:
+					return {'success': True, 'result': query[0]}
+				return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def checkConsumptionUp(self):
+		if self.dataLoaded:
+			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
+				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
+			else:
+				range = getWeekDateRange(self.last['time'])
+				a = self.getAverageValue(range)
+				if a['success']:
+					averageValue = a['result']
+					if averageValue >= 0 :
+						if self.last['value'] > (averageValue * 2):
+							return {'success': True, 'result': True}
+						else:
+							return {'success': True, 'result': False}
+					else:
+						return {'success': False, 'error': True, 'description': "Ошибка. Среднее значение имеет отрицательную величину" }
+				else:
+					return {'success': False, 'error': a['error'], 'description': a['description'] }
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def checkConsumptionStale(self):
+		if self.dataLoaded:
+			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
+			else:
+				range = getHourDateRange(self.last['time'])
+				a = self.getAverageValue(range)
+				if a['success']:
+					averageValue = a['result']
+					if averageValue == 0:
+						return {'success': True, 'result': True}
+					else:
+						return {'success': True, 'result': False}
+				else:
+					return {'success': False, 'error': a['error'], 'description': a['description'] }
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def checkValueDown(self):
+		if self.dataLoaded:
+			if not  self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
+			else:
+				range = getHourDateRange(self.last['time'])
+				a = self.getAverageValue(range)
+				if a['success']:
+					averageValue = a['result']
+					if (averageValue > self.last['value'] * 2):
+						return {'success': True, 'result': True}
+					else:
+						return {'success': True, 'result': False}
+				else:
+					return {'success': False, 'error': a['error'], 'description': a['description'] }					
+		else:
+			return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def getCurrentIncident(self):
+		data = self
+		if not self.initCompleted:
+			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+		else: 
+			if not self.dataLoaded:
+				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+			else:
+				inc = self.checkConnectionLost()
+				if (inc['success'] and inc['result']):
+					return {'success': True, 'result': {'incidentType': 1, 'description': 'Прибор не вышел на связь в установленное время.', 'self': data}}
+				else:
+					if self.parameterType == 1: # 1 - delta (volume)
+						inc = self.checkConsumptionUp()	
+						if (inc['success'] and inc['result']):
+							return {'success': True, 'result': {'incidentType': 2, 'description': 'Зафиксировано повышение расхода контроллируемого параметра.', 'self': data}}
+
+						else:
+							inc = self.checkConsumptionStale()
+							if (inc['success'] and inc['result']):
+								return {'success': True, 'result': {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': data}}
+					if self.parameterType == 2: # 2 - value (pressure)
+						inc = self.checkConsumptionUp()
+						if (inc['success'] and inc['result']):
+							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
+		return {'success': True, 'result': None}
+
+class incidentHandler:
+	def saveIncident(self, incident):
+		pass
+		if len(incident) > 0:
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-			for dumprecord in dump:
-				if not self.incidentExists(dumprecord):
-					if dumprecord['_lastArchiveTime'] == False:
-						d = date(2000, 1, 1)
-						t = time(00, 00)
-						dumprecord['_lastArchiveTime'] = datetime.combine(d, t)
-					args = (
-					dumprecord.get('_lastArchiveTime'),
-					dumprecord.get('_paramId_'),
-					dumprecord.get('incidentType'),
-					dumprecord.get('_paramName'),
-					dumprecord.get('_placeId'),
-					dumprecord.get('parentPlace'),
-					dumprecord.get('childPlace'),
-					dumprecord.get('description'),
-					dumprecord.get('coordinates'),
-					dumprecord.get('placeNameGroup'),
-					dumprecord.get('_lastArchiveData')
-					)
-					try:
-						cursor.execute(query, args)
-					except Exception as e:
-						print(e)
-						conn.rollback()
-					else:
-						conn.commit()
-						a = a + 1
-						savedIncidents.append(dumprecord)
-			print('saved ' + str(a))
-			return savedIncidents
+			if not incident['self'].last.get('time'):
+				d = date(2000, 1, 1)
+				t = time(00, 00)
+				incident['self'].last['time'] = datetime.combine(d, t)
+			args = (
+			incident['self'].last['time'],
+			incident['self'].param_id,
+			incident['incidentType'],
+			incident['self'].metadata['paramName'],
+			incident['self'].metadata['placeId'],
+			incident['self'].metadata['parentPlaceTypeName'] + ' ' + incident['self'].metadata['parentPlaceName'],
+			incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName'],			
+			incident['description'] + ' ' + incident['self'].edescription,
+			incident['self'].metadata['placeCoord'],
+			incident['self'].metadata['placeNameGroup'],
+			incident['self'].last.get('value')
+			)
+			try:
+				cursor.execute(query, args)
+			except Exception as e:
+				print(e)
+				conn.rollback()
+				return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
+			else:
+				conn.commit()
+				return {'success': True, 'result': True}
 
-class email():
-	def __init__(self, dump):
-		self.emailsubst = {}
-		for dumprecord in dump:
-			_parent = dumprecord.get('parentPlace')
-			if _parent not in self.emailsubst:
-				self.emailsubst[_parent] = {}
-			_child = dumprecord.get('childPlace')
-			if _child not in self.emailsubst[_parent]:
-				self.emailsubst[_parent][_child] = []
-			params = (dumprecord.get('_paramName'), dumprecord.get('description'))
-			self.emailsubst[_parent][_child].append(params)
+	def closeIncident(self, incident_id, close_type):
+		if close_type == 1:
+			status = 'autoclosed'
+		else:
+			status = 'closed'
+		query = 'UPDATE "Tepl"."Alert_cnt" SET status = %s WHERE id = %s '
+		args = (status, incident_id)
+		try:
+			cursor.execute(query, args)
+		except Exception as e:
+			print(e)
+			conn.rollback()
+			return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
+		else:
+			conn.commit()
+			return {'success': True, 'result': cursor.lastrowid}
 
-		for parent in self.emailsubst:
-#			print(parent)
-			for child in self.emailsubst[parent]:
-#				print('=> ' + child)
-				for pr in self.emailsubst[parent][child]:
-					print('---> ' + child + ' ' + pr[0],pr[1])
+	def getExistingIncident(self, param_id, incident_type):
+		query = 'SELECT id FROM "Tepl"."Alert_cnt" WHERE status = \'active\' and param_id = %s and type = %s'
+		args = (param_id, incident_type)
+		try:
+			cursor.execute(query, args)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				return {'success': True, 'result': query[0]}
+			return {'success': False, 'result': None}		
 
-	def send(self):
-		if len(self.emailsubst) > 0:
-			html = open(templatefile).read()
-			template = Template(html)
-			message = template.render(subst=self.emailsubst)
-			recipients_emails = email_config['recipients_emails'].split(',')
-			msg = MIMEText(message, 'html', 'utf-8')
-			msg['Subject'] = Header('Новый инцидент.', 'utf-8')
-			msg['From'] = "Система мониторинга <monitoring@rsks.su>"
-			msg['To'] = ", ".join(recipients_emails)
-			server = smtplib.SMTP(email_config['host'])
-			server.sendmail(msg['From'], recipients_emails, msg.as_string())
-			server.quit()
-		print('emailed ' + str(len(self.emailsubst)))	
+def structureIncidents(incidents):
+	emailsubst = {}
+	for incident in incidents:
+		_parent = incident['self'].metadata['parentPlaceTypeName'] + ' ' + incident['self'].metadata['parentPlaceName']
+		if _parent not in emailsubst:
+			emailsubst[_parent] = {}
+		_child = incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName']
+		if _child not in emailsubst[_parent]:
+			emailsubst[_parent][_child] = []
+		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
+		emailsubst[_parent][_child].append(params)
+	return emailsubst
 
+def fillEmailTemplate(emailsubst):
+	if len(emailsubst) > 0:
+		html = open(templatefile).read()
+		template = Template(html)
+		message = template.render(subst=emailsubst)
+		return message
+
+def sendIncidentsNotice(message):
+		recipients_emails = email_config['recipients_emails'].split(',')
+		msg = MIMEText(message, 'html', 'utf-8')
+		msg['Subject'] = Header('Новый инцидент.', 'utf-8')
+		msg['From'] = "Система мониторинга <monitoring@rsks.su>"
+		msg['To'] = ", ".join(recipients_emails)
+		server = smtplib.SMTP(email_config['host'])
+		server.sendmail(msg['From'], recipients_emails, msg.as_string())
+		server.quit()
+
+
+
+#==================================
 db_config = read_config('database')
 email_config = read_config('email')
 
@@ -693,6 +471,7 @@ print(datetime.now())
 print("Connecting to database...")
 try:
 	conn = psycopg2.connect(**db_config)
+	cursor = conn.cursor()
 except psycopg2.OperationalError as e:
 	print(e)
 	print('Connection failed.')
@@ -700,17 +479,48 @@ except psycopg2.OperationalError as e:
 else:
 	print('Connected!')
 
-dump = []
-io = incidentOperations()
-io.autoCloseOpenedIncidents()
+savedIncidentCounter = 0
+autoclosedIncidentCounter = 0
+savedincidents = []
+parametersList = getParamCheckList()
+for param_id in parametersList:
+	iHandler = incidentHandler()
+	# проверка наличия открытого инцидента "не выход на связь"
+	a = iHandler.getExistingIncident(param_id, 1)
+	if a['success'] and a['result']:
+		lostConnectionIncident = a['result']
+	else:
+		lostConnectionIncident = None
+	# проверка и создание новых инцидентов
+	pIncident = parameterIncidents(param_id)
+	a = pIncident.getCurrentIncident()
+	if a['success']:
+		if a['result']:
+			incident = a['result']
+			a = iHandler.getExistingIncident(param_id, incident['incidentType'])
+			if not (a['success'] and a['result']):
+				a = iHandler.saveIncident(incident)
+				if a['success'] and a['result']:
+					savedIncidentCounter += 1
+					savedincidents.append(incident)
+		else: 
+			incident = None
+	# автозакрытие "не выход на связь"
+	if lostConnectionIncident:
+		if incident:
+			if incident['incidentType'] > 1:
+				iHandler.closeIncident(lostConnectionIncident, 1)
+				autoclosedIncidentCounter += 1
+		else:
+			iHandler.closeIncident(lostConnectionIncident, 1)
+			autoclosedIncidentCounter += 1
+print('Новых инцидентов: ' + str(savedIncidentCounter))
+print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
 
-for id in getParamCheckList():
-	cp = controlledParameter(id)
-	arr = cp.getIncidents()
-	if arr:
-		for it in arr:
-			dump.append(it)
-print('finded ' +  str(len(dump)))
-savedIncidentsDump = io.saveIncidents(dump)
-em = email(savedIncidentsDump)
-em.send()
+if savedincidents:
+	emailsubst = structureIncidents(savedincidents)
+	if emailsubst:
+		message = fillEmailTemplate(emailsubst)
+		if message:
+			sendIncidentsNotice(message)
+pass
