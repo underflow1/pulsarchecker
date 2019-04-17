@@ -9,6 +9,7 @@ from email.header    import Header
 averageweekdays = 7 # для ретроспективного вычисления среднего значения в определенный час 
 pollhourinterval = 2 # интервал выхода на связь пульсаров (в часах) используется при вычислении среднего
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
+autoClosableIncidentTypes = [1,5]
 dirsep = os.path.sep
 folder = sys.path[0] + dirsep
 configfile = folder + '..' + dirsep + 'pulsarchecker.config'
@@ -367,6 +368,12 @@ class parameterIncidents(resourceParameter):
 							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
 		return {'success': True, 'result': None}
 
+class parameterBalance(resourceParameter):
+	def __init__(self, id):
+		resourceParameter.__init__(self, id)
+
+
+
 class incidentHandler:
 	def saveIncident(self, incident):
 		pass
@@ -482,15 +489,17 @@ else:
 savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
+
 parametersList = getParamCheckList()
+#parametersList = [39]
 for param_id in parametersList:
+	autoClosableIncidents = []
 	iHandler = incidentHandler()
-	# проверка наличия открытого инцидента "не выход на связь"
-	a = iHandler.getExistingIncident(param_id, 1)
-	if a['success'] and a['result']:
-		lostConnectionIncident = a['result']
-	else:
-		lostConnectionIncident = None
+	# проверка наличия открытых инцидентов, которые подвержены автозакрытию
+	for incidentType in autoClosableIncidentTypes:
+		a = iHandler.getExistingIncident(param_id, incidentType)
+		if a['success'] and a['result']:
+			autoClosableIncidents.append(a['result'])
 	# проверка и создание новых инцидентов
 	pIncident = parameterIncidents(param_id)
 	a = pIncident.getCurrentIncident()
@@ -505,18 +514,19 @@ for param_id in parametersList:
 					savedincidents.append(incident)
 		else: 
 			incident = None
-	# автозакрытие "не выход на связь"
-	if lostConnectionIncident:
+	# автозакрытие инцидентов, которые подвержены автозакрытию
+	for aCIncident in autoClosableIncidents:
 		if incident:
-			if incident['incidentType'] > 1:
-				iHandler.closeIncident(lostConnectionIncident, 1)
+			if incident['incidentType'] not in autoClosableIncidentTypes:
+				iHandler.closeIncident(aCIncident, 1)
 				autoclosedIncidentCounter += 1
 		else:
-			iHandler.closeIncident(lostConnectionIncident, 1)
+			iHandler.closeIncident(aCIncident, 1)
 			autoclosedIncidentCounter += 1
 print('Новых инцидентов: ' + str(savedIncidentCounter))
 print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
 
+# отправка писем
 if savedincidents:
 	emailsubst = structureIncidents(savedincidents)
 	if emailsubst:
