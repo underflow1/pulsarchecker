@@ -11,7 +11,7 @@ pollhourinterval = 2 # интервал выхода на связь пульс�
 pollhourdelta = 3 # лаг добавляемый при проверке (в часах)
 dirsep = os.path.sep
 folder = sys.path[0] + dirsep
-configfile = folder + '..' + dirsep + 'config.ini'
+configfile = folder + '..' + dirsep + 'pulsarchecker.config'
 templatefile = folder +'email.html'
 
 def read_config(section):
