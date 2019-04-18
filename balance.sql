@@ -32,12 +32,12 @@
 
 	INSERT INTO date_range_tmp("DateValue")
 		SELECT CASE
-			WHEN <!TYPE_A> = 1 THEN 
-			"Tepl"."GetDateRange"(<!DATE_S>, <!DATE_E>, '1 hour')
-			WHEN <!TYPE_A> = 2 THEN 
-			"Tepl"."GetDateRange"(<!DATE_S>, <!DATE_E>, '1 day')
-			WHEN <!TYPE_A> = 3 THEN 
-			"Tepl"."GetDateRange"(<!DATE_S>, <!DATE_E>, '1 month')
+			WHEN $type_a = 1 THEN 
+			"Tepl"."GetDateRange"($date_s, $date_e, '1 hour')
+			WHEN $type_a = 2 THEN 
+			"Tepl"."GetDateRange"($date_s, $date_e, '1 day')
+			WHEN $type_a = 3 THEN 
+			"Tepl"."GetDateRange"($date_s, $date_e, '1 month')
 			END;
 
 -- подгружаем архивные данные для всех приборов:
@@ -47,17 +47,17 @@ INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue", "Delta")
 	pr_id IN
 	(
 		SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" p
-		WHERE plc_id IN (SELECT plc_id FROM "Tepl"."Places_cnt" WHERE (place_id = <!PLACE> or plc_id = <!PLACE>)
+		WHERE plc_id IN (SELECT plc_id FROM "Tepl"."Places_cnt" WHERE (place_id = $place or plc_id = $place)
 		AND "ParamRes_id" IN (1))
-		AND typ_arh = <!TYPE_A>
+		AND typ_arh = $type_a
 -- указываем смещение начальной даты, для того чтобы в отчете не было пустой первой строки:
 		AND CASE
-			WHEN <!TYPE_A> = 1 THEN 
-				"DateValue" BETWEEN timestamp <!DATE_S> - interval '1 hour'  AND timestamp <!DATE_E>
-			WHEN <!TYPE_A> = 2 THEN 
-				"DateValue" BETWEEN timestamp <!DATE_S> - interval '1 day'  AND timestamp <!DATE_E>
-			WHEN <!TYPE_A> = 3 THEN 
-				"DateValue" BETWEEN timestamp <!DATE_S> - interval '1 month'  AND timestamp <!DATE_E>
+			WHEN $type_a = 1 THEN 
+				"DateValue" BETWEEN timestamp $date_s - interval '1 hour'  AND timestamp $date_e
+			WHEN $type_a = 2 THEN 
+				"DateValue" BETWEEN timestamp $date_s - interval '1 day'  AND timestamp $date_e
+			WHEN $type_a = 3 THEN 
+				"DateValue" BETWEEN timestamp $date_s - interval '1 month'  AND timestamp $date_e
 			END
 	);
 
@@ -77,12 +77,12 @@ SELECT
 	INNER JOIN "Tepl"."PlaceTyp_cnt" pt ON p.typ_id = pt.typ_id
 	INNER JOIN date_range_tmp dts(date) ON 1=1
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
-	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = <!TYPE_A> 
+	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
 	AND a1."DateValue" = dts.date
 	
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
 	
-	WHERE p.place_id = <!PLACE>
+	WHERE p.place_id = $place
 	GROUP BY "F0"
 	ORDER BY "F0"
 	) results;
@@ -99,15 +99,15 @@ SELECT
 	INNER JOIN date_range_tmp dts(date) ON 1=1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
-	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = <!TYPE_A> 
+	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
 	AND a1."DateValue" = dts.date
 
-	WHERE p.plc_id = <!PLACE>
+	WHERE p.plc_id = $place
 	ORDER BY "F0"
 	) results ;
 
 
-	SELECT dp."F0", dp."F1" as "F5" , dc."F2" as "F10", dc."F2" - dp."F1" AS "F15", @((dp."F1" - dc."F2") / dp."F1" * 100) AS "F20"
+	SELECT dp."F0", dp."F1" as "F5" , dc."F2" as "F10", dc."F2" - dp."F1" AS "F15", ((dc."F2" - dp."F1") / dp."F1" * 100) AS "F20"
 
 	FROM  data_parent_tmp dp
 	INNER JOIN data_child_tmp dc ON dp."F0" = dc."F0"

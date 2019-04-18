@@ -1,0 +1,30 @@
+<style>
+        strong {
+            font-family: Courier;		
+        }        
+        span {
+            font-family: Courier;		
+        }
+        table {
+             font-size: 13px; 
+            font-family: Courier;
+            border-collapse: collapse;
+            border: 1px solid black;
+        }
+        td, th {
+            border: 1px solid black;
+        }
+        a {
+             font-size: 11px; 
+            font-family: Courier;
+          }
+        </style>
+
+<strong> Сводка по инцидентам: </strong>
+<span> Активных инцидентов на данный момент: {{ subst.activeIncidents }} </span><br>
+<span> Создано новых инцидентов: {{ subst.createdIncidents }} </span><br>
+<span> Закрыто вручную инцидентов: {{ subst.closedIncidents }} </span><br>
+<span> Автоматически закрытых инцидентов: {{ subst.autoclosedIncidents }} </span><br>
+<br>
+
+    

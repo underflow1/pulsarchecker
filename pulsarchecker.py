@@ -13,6 +13,7 @@ autoClosableIncidentTypes = [1,5]
 dirsep = os.path.sep
 folder = sys.path[0] + dirsep
 configfile = folder + '..' + dirsep + 'pulsarchecker.config'
+
 balanceQueryFile = folder + dirsep + 'balance.sql'
 incidentsNoticeTemplate = folder +'email.html'
 balanceNoticeTemplate = folder +'balance.html'
@@ -370,25 +371,103 @@ class parameterIncidents(resourceParameter):
 							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
 		return {'success': True, 'result': None}
 
+def prepareQuery(query, arguments):
+	for arg in arguments:
+		if type(arguments[arg]).__name__ == 'date':
+			arguments[arg] = '\'' + str(arguments[arg]) + '\''
+		else: 
+			arguments[arg] = str(arguments[arg])
+		find = "$" + str(arg)
+		replacewith = arguments[arg]
+		query = query.replace(find, replacewith)
+	return query
+	
 class parameterBalance(resourceParameter):
 	def __init__(self, id):
 		resourceParameter.__init__(self, id)
-		date_s = '\'' + str(date.today() - timedelta(days = 6)) + '\''
-		date_e = '\'' + str(date.today() - timedelta(days = 6)) + '\''
-		print(date_s)
+		self.date_s = date.today() - timedelta(days = 60)
+		self.date_e = date.today() - timedelta(days = 7)
 		place = self.metadata['placeId']
-		type_a = 2
-		self.query = self.prepareQuery(place, date_s, date_e, type_a)
-
-
-	def prepareQuery(self, place, date_s, date_e, type_a):
 		filedata = open(balanceQueryFile,'r')
 		query = filedata.read()
-		query = query.replace('<!PLACE>', str(place))
-		query = query.replace('<!DATE_S>', date_s)
-		query = query.replace('<!DATE_E>', date_e)
-		query = query.replace('<!TYPE_A>', str(type_a))
-		return query
+		arguments = {'date_s': self.date_s, 'date_e': self.date_e, 'place': place, 'type_a': 2}
+		self.query = prepareQuery(query, arguments)
+		self.balance = []
+		a = self.getBalanceStats()
+		if a['success'] and a['result']:
+			balance = a['result']
+			for item in balance:
+				if type(item).__name__ == 'float':
+					item = round(item, 1)
+				self.balance.append(item)
+			place = self.metadata['placeTypeName'] + ' ' + self.metadata['placeName']
+			balanceMessage = fillEmailTemplate(balanceNoticeTemplate, {place: self.balance } )
+		else: 
+			balanceMessage = '<strong> Нарушений баланса не зафиксировано. <strong><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
+		subst = self.getIncidentsStats()
+		incidentsMessage = fillEmailTemplate(balanceNoticeTemplate, subst)
+		message = incidentsMessage + balanceMessage
+		sendBalanceNotice(message)
+		
+		
+		sendBalanceNotice(message)
+
+	def getIncidentsStats(self):
+		activeIncidents = 0
+		createdIncidents = 0
+		autoclosedIncidents = 0
+		closedIncidents = 0
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
+		try:
+			cursor.execute(query)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				activeIncidents = query[0]
+		
+
+#		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1 '
+#		args = (self.date_s,)
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > %s and created_at < %s  '
+		args = (self.date_s, self.date_e)
+		try:
+			cursor.execute(query, args)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				createdIncidents = query[0]
+
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > \'%s\' and updated_at < \'%s\'  '
+		args = (str(self.date_s), str(self.date_e))
+		try:
+			cursor.execute(query,args)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				autoclosedIncidents = query[0]
+
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > \'%s\' and updated_at < \'%s\'  '
+		args = (str(self.date_s), str(self.date_e))
+		try:
+			cursor.execute(query,args)
+			query = cursor.fetchone()
+		except Exception as e:
+			print(e)
+			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
+		else:
+			if query:
+				closedIncidents = query[0]
+
+		return {'closedIncidents': closedIncidents, 'autoclosedIncidents':autoclosedIncidents, 'createdIncidents': createdIncidents, 'activeIncidents':activeIncidents }
 
 	def getBalanceStats(self):
 		if self.query:
@@ -402,8 +481,6 @@ class parameterBalance(resourceParameter):
 				if query:
 					return {'success': True, 'result': query}
 				return {'success': True, 'result': None}
-
-
 
 class incidentHandler:
 	def saveIncident(self, incident):
@@ -576,11 +653,11 @@ if savedincidents:
 pass
 
 aa= parameterBalance(48)
-bb= aa.getBalanceStats()
-if bb['success'] and bb['result']:
-	balance = bb['result']
-	message = fillEmailTemplate(balanceNoticeTemplate, {'Большой куст': [[11, 222, 32, 324, 2]] } )
-	sendBalanceNotice(message)
+#bb= aa.getBalanceStats()
+#if bb['success'] and bb['result']:
+#	balance = bb['result']
+#	message = fillEmailTemplate(balanceNoticeTemplate, {'Большой куст': [[11, 222, 32, 324, 2]] } )
+#	sendBalanceNotice(message)
 	
 
 pass
