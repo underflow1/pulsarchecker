@@ -13,7 +13,9 @@ autoClosableIncidentTypes = [1,5]
 dirsep = os.path.sep
 folder = sys.path[0] + dirsep
 configfile = folder + '..' + dirsep + 'pulsarchecker.config'
-templatefile = folder +'email.html'
+balanceQueryFile = folder + dirsep + 'balance.sql'
+incidentsNoticeTemplate = folder +'email.html'
+balanceNoticeTemplate = folder +'balance.html'
 
 def read_config(section):
     parser = ConfigParser()
@@ -371,6 +373,35 @@ class parameterIncidents(resourceParameter):
 class parameterBalance(resourceParameter):
 	def __init__(self, id):
 		resourceParameter.__init__(self, id)
+		date_s = '\'' + str(date.today() - timedelta(days = 6)) + '\''
+		date_e = '\'' + str(date.today() - timedelta(days = 6)) + '\''
+		print(date_s)
+		place = self.metadata['placeId']
+		type_a = 2
+		self.query = self.prepareQuery(place, date_s, date_e, type_a)
+
+
+	def prepareQuery(self, place, date_s, date_e, type_a):
+		filedata = open(balanceQueryFile,'r')
+		query = filedata.read()
+		query = query.replace('<!PLACE>', str(place))
+		query = query.replace('<!DATE_S>', date_s)
+		query = query.replace('<!DATE_E>', date_e)
+		query = query.replace('<!TYPE_A>', str(type_a))
+		return query
+
+	def getBalanceStats(self):
+		if self.query:
+			try:
+				cursor.execute(self.query)
+				query = cursor.fetchone()
+			except Exception as e:
+				print(e)
+				return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
+			else:
+				if query:
+					return {'success': True, 'result': query}
+				return {'success': True, 'result': None}
 
 
 
@@ -451,12 +482,13 @@ def structureIncidents(incidents):
 		emailsubst[_parent][_child].append(params)
 	return emailsubst
 
-def fillEmailTemplate(emailsubst):
-	if len(emailsubst) > 0:
+def fillEmailTemplate(templatefile, subst):
+	if len(subst) > 0:
 		html = open(templatefile).read()
 		template = Template(html)
-		message = template.render(subst=emailsubst)
+		message = template.render(subst=subst)
 		return message
+	return 'Отклонений по балансу за прошедший день не было.<br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
 
 def sendIncidentsNotice(message):
 		recipients_emails = email_config['recipients_emails'].split(',')
@@ -468,7 +500,15 @@ def sendIncidentsNotice(message):
 		server.sendmail(msg['From'], recipients_emails, msg.as_string())
 		server.quit()
 
-
+def sendBalanceNotice(message):
+		recipients_emails = email_config['recipients_emails'].split(',')
+		msg = MIMEText(message, 'html', 'utf-8')
+		msg['Subject'] = Header('Сводка по отклонению балансов за ' + str(date.today() - timedelta(days = 6)), 'utf-8')
+		msg['From'] = "Система мониторинга <monitoring@rsks.su>"
+		msg['To'] = ", ".join(recipients_emails)
+		server = smtplib.SMTP(email_config['host'])
+		server.sendmail(msg['From'], recipients_emails, msg.as_string())
+		server.quit()
 
 #==================================
 db_config = read_config('database')
@@ -491,7 +531,7 @@ autoclosedIncidentCounter = 0
 savedincidents = []
 
 parametersList = getParamCheckList()
-#parametersList = [39]
+parametersList = [48]
 for param_id in parametersList:
 	autoClosableIncidents = []
 	iHandler = incidentHandler()
@@ -530,7 +570,17 @@ print('Автоматически закрытых инцидентов: ' + str
 if savedincidents:
 	emailsubst = structureIncidents(savedincidents)
 	if emailsubst:
-		message = fillEmailTemplate(emailsubst)
+		message = fillEmailTemplate(incidentsNoticeTemplate, emailsubst)
 		if message:
 			sendIncidentsNotice(message)
+pass
+
+aa= parameterBalance(48)
+bb= aa.getBalanceStats()
+if bb['success'] and bb['result']:
+	balance = bb['result']
+	message = fillEmailTemplate(balanceNoticeTemplate, {'Большой куст': [[11, 222, 32, 324, 2]] } )
+	sendBalanceNotice(message)
+	
+
 pass

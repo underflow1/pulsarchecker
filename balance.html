@@ -1,0 +1,36 @@
+<style>
+   table {
+	font-size: 13px; 
+	font-family: Courier;
+    border-spacing: 0px; 
+   }
+  </style>
+<table>
+<tbody>
+	{% for place in subst %}
+<tr>
+<td>{{ place }}<</td>
+</tr>
+<tr>
+<td> Дата </td>
+<td> Объем Куста (м3) </td>
+<td> Объем потребителей (м3) </td>
+<td> Потери (м3) </td>
+<td> % потери </td>
+</tr>
+		{% for value in subst[place] %}
+<tr>
+<td>{{value[0]}}</td>
+<td>{{value[1]}}</td>
+<td>{{value[2]}}</td>
+<td>{{ value[3] }}</td>
+<td>{{ value[4] }}</td>
+</tr>
+		{% endfor %}
+	{% endfor %}
+</tbody>
+</table>
+<br>
+	
+<a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>
+
