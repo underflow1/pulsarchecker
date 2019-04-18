@@ -1,14 +1,29 @@
 <style>
-   table {
+	p {
+		font-size: 13px; 
+	}
+	strong {
+		font-size: 12px; 
+		font-family: Courier;		
+	}        
+	span {
+		font-size: 12px; 
+		font-family: Courier;		
+	}
+	table {
 		font-size: 13px; 
 		font-family: Courier;
 		border-spacing: 0px; 
-   }
-   a {
- 		font-size: 11px; 
+		}      
+	td, th {
+		font-size: 12px; 
+		border: 1px solid black;
+	}
+	a {
+		font-size: 11px; 
 		font-family: Courier;
-	  }
-  </style>
+		}
+</style>
 <table>
 <tbody>
 	{% for parent in subst %}
@@ -32,3 +47,4 @@
 <br>
 	
 <a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>
+

@@ -484,7 +484,6 @@ class dailyReport():
 		dailyReportMessage = fillEmailTemplate(dailyReportNoticeTemplate, subst)
 		return dailyReportMessage
 
-
 class incidentHandler:
 	def saveIncident(self, incident):
 		pass
