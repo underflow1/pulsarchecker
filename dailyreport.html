@@ -1,30 +1,37 @@
 <style>
+        p {
+            font-size: 13px; 
+        }
         strong {
+            font-size: 12px; 
             font-family: Courier;		
         }        
         span {
+            font-size: 12px; 
             font-family: Courier;		
         }
         table {
-             font-size: 13px; 
+            font-size: 12px; 
             font-family: Courier;
             border-collapse: collapse;
             border: 1px solid black;
         }
         td, th {
+            font-size: 12px; 
             border: 1px solid black;
         }
         a {
-             font-size: 11px; 
+            font-size: 10px; 
             font-family: Courier;
           }
         </style>
+<p> Сводка по инцидентам: </p>
+{% for key in subst %}
+<span> {{ key }} : {{ subst[key] }} </span><br>
+{% endfor %}
+<br><br>
+<p>Сводка по отклонениям баланса: </p>
 
-<strong> Сводка по инцидентам: </strong>
-<span> Активных инцидентов на данный момент: {{ subst.activeIncidents }} </span><br>
-<span> Создано новых инцидентов: {{ subst.createdIncidents }} </span><br>
-<span> Закрыто вручную инцидентов: {{ subst.closedIncidents }} </span><br>
-<span> Автоматически закрытых инцидентов: {{ subst.autoclosedIncidents }} </span><br>
-<br>
+
 
     
