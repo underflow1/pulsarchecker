@@ -59,6 +59,50 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
+# подставить значение переменных в sql запрос
+def prepareQuery(query, arguments):
+	for arg in arguments:
+		a = type(arguments[arg]).__name__
+		if a == 'date' or a == 'datetime':
+			arguments[arg] = '\'' + str(arguments[arg]) + '\''
+		else: 
+			arguments[arg] = str(arguments[arg])
+		find = "$" + str(arg)
+		replacewith = arguments[arg]
+		query = query.replace(find, replacewith)
+	return query
+	
+# выполнить query fetchone
+def queryFetchOne(query):
+	try:
+		cursor.execute(query)
+		query = cursor.fetchone()
+	except Exception as e:
+		print(e)
+		message = 'При чтении базы данных случилась ошибка: \n' + str(e)
+		header = 'Ошибка мониторинга'
+		sendEmail(header, message)
+		return {'success': False, 'error': e, 'edescription': 'Ошибка чтения базы данных' }
+	else:	
+		if len(query) == 1:
+			return  {'success': True,  'result': query[0]}
+		return  {'success': True,  'result': query}
+
+# выполнить инсерт или апдейт
+def queryUpdate(query):
+		try:
+			cursor.execute(query)
+		except Exception as e:
+			print(e)
+			conn.rollback()
+			message = 'При записи изменений в базу данных случилась ошибка: \n' + e 
+			header = 'Ошибка мониторинга'
+			sendEmail(header, message)
+			return {'success': False, 'error': e, 'description':'Ошибка записи изменений в базу данных'}
+		else:
+			conn.commit()
+		return {'success': True, 'result': None}
+
 class resourceParameter:
 	def __init__(self, param_id):
 		self.param_id = param_id
@@ -76,20 +120,15 @@ class resourceParameter:
 			self.edescription = a['description']
 
 	def checkParameterExists(self):
-		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = %s '
-		args = (self.param_id,)
-		try:
-			cursor.execute(query, args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-			exit(0)
-		else:
-			if query:
-				if query[0] == self.param_id:
-					return {'success': True, 'result': True}
-			return {'success': False, 'error': True, 'description':'Такого параметра не существует'}
+		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = $param_id '
+		args = {'param_id': self.param_id}
+		query = queryFetchOne(prepareQuery(query, args))
+		if query['success']:
+			if query['result']:
+				return {'success': True, 'result': True}
+			else:
+				return {'success': False, 'error': True, 'description':'Такого параметра не существует'}
+		return query
 
 	def getParameterMetadata(self):
 		query = '\
@@ -201,54 +240,38 @@ class parameterIncidents(resourceParameter):
 
 	def getLastArchiveTime(self):
 		if self.initCompleted:
-			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = %s AND typ_arh = 1'
-			args = (self.param_id,)
-			try:
-				cursor.execute(query, args)
-				query = cursor.fetchone()
-			except Exception as e:
-				print(e)
-				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-				exit(0)
-			else:	
-				if query[0]:
-					return {'success': True, 'result': query[0]}
-				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
-		else:
-			return {'success': False, 'error': self.error, 'description': self.edescription}
+			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '
+			query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id}))
+			if query['success']:
+				if query['result']:
+					return {'success': True, 'result': query['result']}
+				else:
+					return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
+			return query
+		return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def getLastArchive(self):
 		if self.initCompleted:
-			query = ' \
-			SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" \
-			WHERE pr_id = %s AND typ_arh = 1 \
-			AND "DateValue" = %s '
 			a = self.getLastArchiveTime()
 			if a['success']:
 				lastArchiveTime = a['result']
-				args = (self.param_id, lastArchiveTime)
-				try:
-					cursor.execute(query, args)
-					query = cursor.fetchone()
-				except Exception as e:
-					print(e)
-					return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-					exit(0)
-				else:	
-					if query[0]:
+				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastArchiveTime '				
+				query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id, 'lastArchiveTime': lastArchiveTime}))
+				if query['success']:
+					if query['result']:
 						if self.parameterType == 1:
 							#self.lastArchiveData = round(query[1],2) 
-							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query[1],2)}}
+							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query['result'][1],2)}}
 						if self.parameterType == 2: 
 							#self.lastArchiveData = round(query[0],2)
-							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query[0],2)}}
+							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query['result'][0],2)}}
 						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
 					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
 			else:
 				return {'success': False, 'error': a['error'], 'description': a['description'] }
 		else:
 			return {'success': False, 'error': self.error, 'description': self.edescription}
-	
+
 	def checkConnectionLost(self): #1
 		if self.dataLoaded:
 			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self.last['time']:
@@ -372,17 +395,15 @@ class parameterIncidents(resourceParameter):
 							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
 		return {'success': True, 'result': None}
 
-def prepareQuery(query, arguments):
-	for arg in arguments:
-		if type(arguments[arg]).__name__ == 'date':
-			arguments[arg] = '\'' + str(arguments[arg]) + '\''
-		else: 
-			arguments[arg] = str(arguments[arg])
-		find = "$" + str(arg)
-		replacewith = arguments[arg]
-		query = query.replace(find, replacewith)
-	return query
-	
+def updateIncidentRegister(param_id, incide):
+	queryResult = queryFetchOne(' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = 38 and type = 1 ')
+	if queryResult['success']:
+		if queryResult['result']:
+			queryUpdate(' UPDATE "Tepl"."Alerts_register" SET lastchecked = %s WHERE param_id = 38 and type = 1; ')
+		else:
+			queryUpdate(' INSERT INTO "Tepl"."Alerts_register"(  param_id, lastchecked, incident_type)  VALUES (%s, %s, %s);  ')
+	pass
+
 class parameterBalance(resourceParameter):
 	def __init__(self, id, date):
 		resourceParameter.__init__(self, id)
@@ -451,9 +472,7 @@ class dailyReport():
 			if query:
 				stats['Создано новых инцидентов за прошедший день'] = query[0]
 
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' \
-			and updated_at > %s \
-			and updated_at < %s  '
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > %s and updated_at < %s  '
 		args = (str(self.date_s), str(self.date_e))
 		try:
 			cursor.execute(query,args)
@@ -651,7 +670,8 @@ if len(sys.argv) == 1:
 		if emailsubst:
 			message = fillEmailTemplate(incidentsNoticeTemplate, emailsubst)
 			if message:
-				sendIncidentsNotice(message)
+				header = 'Новый инцидент.'
+				sendEmail(header, message)
 
 else:
 	# ежедневный отчет + проверка баланса
