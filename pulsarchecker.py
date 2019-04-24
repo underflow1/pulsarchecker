@@ -63,7 +63,7 @@ def getHourDateRange(lastDate):
 def prepareQuery(query, arguments):
 	for arg in arguments:
 		a = type(arguments[arg]).__name__
-		if a == 'date' or a == 'datetime':
+		if a == 'date' or a == 'datetime' or a == 'str':
 			arguments[arg] = '\'' + str(arguments[arg]) + '\''
 		else: 
 			arguments[arg] = str(arguments[arg])
@@ -83,10 +83,12 @@ def queryFetchOne(query):
 		header = 'Ошибка мониторинга'
 		sendEmail(header, message)
 		return {'success': False, 'error': e, 'edescription': 'Ошибка чтения базы данных' }
-	else:	
-		if len(query) == 1:
-			return  {'success': True,  'result': query[0]}
-		return  {'success': True,  'result': query}
+	else:
+		if query:	
+			if len(query) == 1:
+				return  {'success': True,  'result': query[0]}
+			return  {'success': True,  'result': query}
+		return  {'success': False,  'error': False, 'edescription': 'запрос вернул пустой результат'}
 
 # выполнить инсерт или апдейт
 def queryUpdate(query):
@@ -121,8 +123,7 @@ class resourceParameter:
 
 	def checkParameterExists(self):
 		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = $param_id '
-		args = {'param_id': self.param_id}
-		query = queryFetchOne(prepareQuery(query, args))
+		query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id}))
 		if query['success']:
 			if query['result']:
 				return {'success': True, 'result': True}
@@ -154,37 +155,30 @@ class resourceParameter:
 		LEFT JOIN "Tepl"."PlaceTyp_cnt" parentplacetype on parentplace.typ_id = parentplacetype.typ_id \
 		LEFT JOIN (SELECT * FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True) task on paramlist.prp_id = task.prp_id \
 		LEFT JOIN (SELECT * FROM "Tepl"."PropPlc_cnt" WHERE prop_id IN (72, 73, 74)) prop on place.plc_id = prop.plc_id \
-		WHERE paramlist.prp_id = %s'
-		args = (self.param_id,)
-		try:
-			cursor.execute(query, args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-			exit(0)
-		else:
-			if query:
+		WHERE paramlist.prp_id = $param_id'
+		query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id}))
+		if query['success']:
+			if query['result']:
 				coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
-				if not query[12] == None:
-					placeCoord = coords.replace('_coords_', query[12])
+				if not query['result'][12] == None:
+					placeCoord = coords.replace('_coords_', query['result'][12])
 				else:
 					placeCoord = 'https://tsc96.ru/upload/iblock/a5a/a5a129ed8c830e2dcafec7426d4c95d1.jpg'
 				data = {
-					'paramTypeId': query[1],
-					'paramName': query[2],
-					'placeId': query[3],
-					'placeName': query[4],
-					'placeTypeId': query[5],
-					'placeTypeName': query[6],
-					'parentPlaceId': query[7],
-					'parentPlaceName': query[8],
-					'parentPlaceTypeId': query[9],
-					'parentPlaceTypeName': query[10],
-					'paramStartDate': query[11].replace(tzinfo=None),
+					'paramTypeId': query['result'][1],
+					'paramName': query['result'][2],
+					'placeId': query['result'][3],
+					'placeName': query['result'][4],
+					'placeTypeId': query['result'][5],
+					'placeTypeName': query['result'][6],
+					'parentPlaceId': query['result'][7],
+					'parentPlaceName': query['result'][8],
+					'parentPlaceTypeId': query['result'][9],
+					'parentPlaceTypeName': query['result'][10],
+					'paramStartDate': query['result'][11].replace(tzinfo=None),
 					'placeCoord': placeCoord,
-					'placeNameGroup': query[13]
-				}
+					'placeNameGroup': query['result'][13]
+				}				
 				return {'success': True, 'result': data}
 			return {'success': False, 'error': True, 'description':'По данному параметру нет метаданных'}
 	
@@ -245,8 +239,7 @@ class parameterIncidents(resourceParameter):
 			if query['success']:
 				if query['result']:
 					return {'success': True, 'result': query['result']}
-				else:
-					return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
+				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
 			return query
 		return {'success': False, 'error': self.error, 'description': self.edescription}
 
@@ -287,29 +280,21 @@ class parameterIncidents(resourceParameter):
 				rangetype = '1 day'
 			else:
 				rangetype = '1 hour'
-			for item in timerange:
-				item = str(item)
 			query = '\
 			DROP TABLE IF EXISTS date_range_tmp; \
 			CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
-			INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"(%s, %s, %s);\
+			INSERT INTO date_range_tmp SELECT "Tepl"."GetDateRange"($date_s, $date_e, $rangetype);\
 			SELECT * FROM date_range_tmp;\
-			SELECT SUM(CASE WHEN %s = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
-			WHERE pr_id = %s AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
-			args = (timerange[0], timerange[1], rangetype, self.parameterType, self.param_id)
-			try:
-				cursor.execute(query, args)
-				query = cursor.fetchone()
-			except Exception as e:
-				print(e)
-				return {'success': False, 'error': e, 'description': 'Ошибка чтения базы данных'}
-				exit(0)
-			else:	
-				if query[0]:
-					return {'success': True, 'result': query[0]}
+			SELECT SUM(CASE WHEN $parameterType = 1 THEN "Delta" ELSE "DataValue" END)/(SELECT COUNT(*) FROM date_range_tmp) FROM "Tepl"."Arhiv_cnt"\
+			WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" IN (SELECT * FROM date_range_tmp);'
+			args = {'date_s': timerange[0], 'date_e': timerange[1], 'rangetype': rangetype, 'parameterType': self.parameterType, 'param_id': self.param_id}
+			query = queryFetchOne(prepareQuery(query, args))
+			if query['success']:
+				if query['result']:
+					return {'success': True, 'result': query['result']}
 				return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
-		else:
-			return {'success': False, 'error': self.error, 'description': self.edescription}
+			return query
+		return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def checkConsumptionUp(self):
 		if self.dataLoaded:
@@ -419,16 +404,10 @@ class parameterBalance(resourceParameter):
 		
 	def getBalanceStats(self):
 		if self.query:
-			try:
-				cursor.execute(self.query)
-				query = cursor.fetchone()
-			except Exception as e:
-				print(e)
-				return {'success': False, 'error': e, 'description':'Ошибка записи в базу данных'}
-			else:
-				if query:
-					return {'success': True, 'result': query}
-				return {'success': True, 'result': None}
+			query = queryFetchOne(self.query)
+			if query['success']:
+				return {'success': True, 'result': query['result']}
+			return query
 
 	def getBalanceMessage(self):
 		a = self.getBalanceStats()
@@ -449,52 +428,25 @@ class dailyReport():
 
 	def getIncidentsStats(self):
 		stats = {}
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
-		try:
-			cursor.execute(query)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-		else:
-			if query:
-				stats['Активных инцидентов на данный момент'] = query[0]
+		args = {'date_s': self.date_s, 'date_e': self.date_e}
+		query = queryFetchOne(' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' ')
+		if query['success'] and query['result']:
+			stats['Активных инцидентов на данный момент'] = query['result']	
 
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > %s and created_at < %s  '
-		args = (str(self.date_s), str(self.date_e))
-		try:
-			cursor.execute(query, args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-		else:
-			if query:
-				stats['Создано новых инцидентов за прошедший день'] = query[0]
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > $date_s and created_at < $date_e '
+		query = queryFetchOne((prepareQuery(query, args)))
+		if query['success'] and query['result']:
+			stats['Создано новых инцидентов за прошедший день'] = query['result']	
 
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > %s and updated_at < %s  '
-		args = (str(self.date_s), str(self.date_e))
-		try:
-			cursor.execute(query,args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-		else:
-			if query:
-				stats['Инцидентов закрытых автоматически']  = query[0]
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > $date_s and updated_at < $date_e '
+		query = queryFetchOne((prepareQuery(query, args)))
+		if query['success'] and query['result']:
+			stats['Инцидентов закрытых автоматически']  = query['result']
 
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > %s and updated_at < %s  '
-		args = (str(self.date_s), str(self.date_e))
-		try:
-			cursor.execute(query,args)
-			query = cursor.fetchone()
-		except Exception as e:
-			print(e)
-			return {'success': False, 'error': e, 'description':'Ошибка чтения базы данных'}
-		else:
-			if query:
-				stats['Инцидентов закрытых вручную']  = query[0]
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > $date_s and updated_at < $date_e '
+		query = queryFetchOne((prepareQuery(query, args)))
+		if query['success'] and query['result']:
+			stats['Инцидентов закрытых вручную'] = query['result']
 
 		return stats
 
@@ -627,7 +579,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 2:
 	parametersList = getParamCheckList()
 	#parametersList = [48]
 	for param_id in parametersList:
