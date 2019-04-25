@@ -98,13 +98,26 @@ def queryUpdate(query):
 		except Exception as e:
 			print(e)
 			conn.rollback()
-			message = 'При записи изменений в базу данных случилась ошибка: \n' + e 
+			message = 'При записи изменений в базу данных случилась ошибка: \n' + str(e)
 			header = 'Ошибка мониторинга'
 			sendEmail(header, message)
 			return {'success': False, 'error': e, 'description':'Ошибка записи изменений в базу данных'}
 		else:
 			conn.commit()
 		return {'success': True, 'result': None}
+
+def updateIncidentRegister(param_id, incident_type, lastchecked):
+	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id and incident_type = $incident_type '
+	args = {'param_id': param_id, 'incident_type': incident_type}
+	queryResult = queryFetchOne(prepareQuery(query, args))
+	if queryResult['success']:
+		if queryResult['result']:
+			query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked = $lastchecked WHERE param_id = $param_id and incident_type = $incident_type; '
+			args = {'param_id': param_id, 'incident_type': incident_type, 'lastchecked': lastchecked}
+		else:
+			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked, incident_type)  VALUES ($param_id, $lastchecked, $incident_type);  '
+			args = {'param_id': param_id, 'incident_type': incident_type, 'lastchecked': lastchecked}
+		queryUpdate(prepareQuery(query, args))
 
 class resourceParameter:
 	def __init__(self, param_id):
@@ -225,15 +238,21 @@ class parameterIncidents(resourceParameter):
 		self.last = {}
 		self.dataLoaded = False
 		if self.initCompleted:
-			a = self.getLastArchive()
+			a = self.getNewestArchiveTime()
 			if a['success'] and a['result']:
-				self.last = a['result']
-				self.dataLoaded = True
-			else:
-				self.error = a['error']
-				self.edescription = a['description']	
+				self.last['newestArchiveTime'] = a['result']
+				a = self.getLastCheckedTime()
+				if a['success'] and a['result']:
+					self.last['lastCheckedTime'] = a['result']
+					a = self.getLastArchiveData()
+					if a['success'] and a['result']:
+						self.last['lastArchiveValue'] = a['result']
+						self.dataLoaded = True
+					return
+			self.error = a['error']
+			self.edescription = a['description']	
 
-	def getLastArchiveTime(self):
+	def getNewestArchiveTime(self):
 		if self.initCompleted:
 			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '
 			query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id}))
@@ -244,31 +263,47 @@ class parameterIncidents(resourceParameter):
 			return query
 		return {'success': False, 'error': self.error, 'description': self.edescription}
 
-	def getLastArchive(self):
+	def getLastCheckedTime(self):
 		if self.initCompleted:
-			a = self.getLastArchiveTime()
-			if a['success']:
-				lastArchiveTime = a['result']
-				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastArchiveTime '				
-				query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id, 'lastArchiveTime': lastArchiveTime}))
+			query = ' SELECT lastchecked FROM  "Tepl"."Alerts_register"  WHERE param_id = $param_id AND incident_type = $incident_type '
+			args = {'param_id': self.param_id, 'incident_type': 1}
+			query = queryFetchOne(prepareQuery(query, args))
+			if query['success']:
+				if query['result']:
+					return {'success': True, 'result': query['result']}
+				a = self.getNewestArchiveTime() 
+				if a['success'] and a['result']:
+					updateIncidentRegister(self.param_id, 1, a['result'])
+					return {'success': True, 'result': a['result'] }
+				return a
+			return query
+		return {'success': False, 'error': self.error, 'description': self.edescription}
+
+	def getLastArchiveData(self):
+		if self.initCompleted:
+			a = self.getLastCheckedTime()
+			if a['success'] and a['result']:
+				lastCheckedTime = a['result']
+				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastCheckedTime '				
+				query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id, 'lastCheckedTime': lastCheckedTime}))
 				if query['success']:
 					if query['result']:
 						if self.parameterType == 1:
 							#self.lastArchiveData = round(query[1],2) 
-							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query['result'][1],2)}}
+							return {'success': True, 'result': round(query['result'][1],2)}
 						if self.parameterType == 2: 
 							#self.lastArchiveData = round(query[0],2)
-							return {'success': True, 'result': {'time': lastArchiveTime, 'value': round(query['result'][0],2)}}
+							return {'success': True, 'result': round(query['result'][0],2)}
 						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
 					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
-			else:
-				return {'success': False, 'error': a['error'], 'description': a['description'] }
-		else:
-			return {'success': False, 'error': self.error, 'description': self.edescription}
+				return query
+			return {'success': False, 'error': a['error'], 'description': a['description'] }
+		return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def checkConnectionLost(self): #1
 		if self.dataLoaded:
-			if (datetime.now() - timedelta(hours = pollhourinterval + pollhourdelta)) > self.last['time']:
+			#if self.last['newestArchiveTime'] < ( - timedelta(hours = pollhourinterval + pollhourdelta)):
+			if (datetime.now() - self.last['newestArchiveTime']) > timedelta(hours = pollhourinterval + pollhourdelta):
 				return {'success': True, 'result': True}
 			else:
 				return {'success': True, 'result': False}
@@ -299,15 +334,15 @@ class parameterIncidents(resourceParameter):
 
 	def checkConsumptionUp(self):
 		if self.dataLoaded:
-			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
+			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getWeekDateRange(self.last['time'])
+				range = getWeekDateRange(self.last['lastCheckedTime'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
 					if averageValue >= 0 :
-						if self.last['value'] > (averageValue * 2):
+						if self.last['lastArchiveValue'] > (averageValue * 2):
 							return {'success': True, 'result': True}
 						else:
 							return {'success': True, 'result': False}
@@ -320,10 +355,10 @@ class parameterIncidents(resourceParameter):
 
 	def checkConsumptionStale(self):
 		if self.dataLoaded:
-			if not self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getHourDateRange(self.last['time'])
+				range = getHourDateRange(self.last['lastCheckedTime'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
@@ -338,14 +373,14 @@ class parameterIncidents(resourceParameter):
 
 	def checkValueDown(self):
 		if self.dataLoaded:
-			if not  self.last['time'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
+			if not  self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getHourDateRange(self.last['time'])
+				range = getHourDateRange(self.last['lastCheckedTime'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
-					if (averageValue > self.last['value'] * 2):
+					if (averageValue > self.last['lastArchiveValue'] * 2):
 						return {'success': True, 'result': True}
 					else:
 						return {'success': True, 'result': False}
@@ -380,15 +415,6 @@ class parameterIncidents(resourceParameter):
 						if (inc['success'] and inc['result']):
 							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
 		return {'success': True, 'result': None}
-
-def updateIncidentRegister(param_id, incide):
-	queryResult = queryFetchOne(' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = 38 and type = 1 ')
-	if queryResult['success']:
-		if queryResult['result']:
-			queryUpdate(' UPDATE "Tepl"."Alerts_register" SET lastchecked = %s WHERE param_id = 38 and type = 1; ')
-		else:
-			queryUpdate(' INSERT INTO "Tepl"."Alerts_register"(  param_id, lastchecked, incident_type)  VALUES (%s, %s, %s);  ')
-	pass
 
 class parameterBalance(resourceParameter):
 	def __init__(self, id, date):
@@ -463,12 +489,12 @@ class incidentHandler:
 		if len(incident) > 0:
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-			if not incident['self'].last.get('time'):
+			if not incident['self'].last.get('lastCheckedTime'):
 				d = date(2000, 1, 1)
 				t = time(00, 00)
-				incident['self'].last['time'] = datetime.combine(d, t)
+				incident['self'].last['lastCheckedTime'] = datetime.combine(d, t)
 			args = (
-			incident['self'].last['time'],
+			incident['self'].last['lastCheckedTime'],
 			incident['self'].param_id,
 			incident['incidentType'],
 			incident['self'].metadata['paramName'],
@@ -478,7 +504,7 @@ class incidentHandler:
 			incident['description'] + ' ' + incident['self'].edescription,
 			incident['self'].metadata['placeCoord'],
 			incident['self'].metadata['placeNameGroup'],
-			incident['self'].last.get('value')
+			incident['self'].last.get('lastArchiveValue')
 			)
 			try:
 				cursor.execute(query, args)
@@ -540,16 +566,6 @@ def fillEmailTemplate(templatefile, subst):
 		template = Template(html)
 		message = template.render(subst=subst)
 		return message
-
-def sendIncidentsNotice(message):
-		recipients_emails = email_config['recipients_emails'].split(',')
-		msg = MIMEText(message, 'html', 'utf-8')
-		msg['Subject'] = Header('Новый инцидент.', 'utf-8')
-		msg['From'] = "Система мониторинга <monitoring@rsks.su>"
-		msg['To'] = ", ".join(recipients_emails)
-		server = smtplib.SMTP(email_config['host'])
-		server.sendmail(msg['From'], recipients_emails, msg.as_string())
-		server.quit()
 
 def sendEmail(header, message):
 		recipients_emails = email_config['recipients_emails'].split(',')
@@ -648,3 +664,8 @@ else:
 	message = dailyReportPart + balancePart
 	header = 'Ежедневная сводка мониторинга за ' + str(date)
 	sendEmail(header, message)
+
+
+
+updateIncidentRegister(39, 1, '2019-04-26 11:00:00')
+print(parameterIncidents(55).getLastCheckedTime())
