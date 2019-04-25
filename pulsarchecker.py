@@ -60,13 +60,14 @@ def getHourDateRange(lastDate):
 	return datalist
 
 # подставить значение переменных в sql запрос
-def prepareQuery(query, arguments):
-	for arg in arguments:
-		a = type(arguments[arg]).__name__
+def prepareQuery(query, args):
+	arguments = {}
+	for arg in args:
+		a = type(args[arg]).__name__
 		if a == 'date' or a == 'datetime' or a == 'str':
-			arguments[arg] = '\'' + str(arguments[arg]) + '\''
+			arguments[arg] = '\'' + str(args[arg]) + '\''
 		else: 
-			arguments[arg] = str(arguments[arg])
+			arguments[arg] = str(args[arg])
 		find = "$" + str(arg)
 		replacewith = arguments[arg]
 		query = query.replace(find, replacewith)
@@ -277,9 +278,9 @@ class parameterIncidents(resourceParameter):
 	def getAverageValue(self, timerange):
 		if self.dataLoaded:
 			if timerange[1] - timerange[0] > timedelta(hours = 24):
-				rangetype = '1 day'
+				rangetype = "1 day"
 			else:
-				rangetype = '1 hour'
+				rangetype = "1 hour"
 			query = '\
 			DROP TABLE IF EXISTS date_range_tmp; \
 			CREATE TEMPORARY TABLE date_range_tmp("DateValue" timestamp without time zone); \
@@ -434,7 +435,8 @@ class dailyReport():
 			stats['Активных инцидентов на данный момент'] = query['result']	
 
 		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > $date_s and created_at < $date_e '
-		query = queryFetchOne((prepareQuery(query, args)))
+		query = prepareQuery(query, args)
+		query = queryFetchOne(query)
 		if query['success'] and query['result']:
 			stats['Создано новых инцидентов за прошедший день'] = query['result']	
 
@@ -579,7 +581,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 1:
 	parametersList = getParamCheckList()
 	#parametersList = [48]
 	for param_id in parametersList:
