@@ -696,32 +696,37 @@ if len(sys.argv) == 1:
 						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
 
 					# перебираем все инциденты за время прошедшее с момента последней проверки
-					date_s = pIncident.last['lastCheckedTime']
-					date_e = pIncident.last['newestArchiveTime']
-					datesTuple= getDatesByHour(date_s, date_e)
-					print('количество пропущенных точек проверки: ' + str(len(datesTuple)))
-					for dateTuple in datesTuple:
-						date = dateTuple[0]
-						print(date)
-						pIncident.last['lastchecked'] = date
-						a = pIncident.getCurrentIncident()
-						if a['success'] and a['result']:
-							incident = a['result']
-							incidentType = incident['incidentType']
-							a = iHandler.getExistingIncident(pIncident.param_id, incidentType)
-							if a['success']:
-								activeTypedIncident = a['result']
-								a = iHandler.getExistingIncidentLastCheckedTime(activeTypedIncident)
+					datesTuple= getDatesByHour(pIncident.last['lastCheckedTime'], pIncident.last['newestArchiveTime'])
+					if len(datesTuple) == 1:
+						print('Параметр ' + str(pIncident.param_id) + ' уже проверен ранее')
+					else:
+						print('Параметр: ' + str(pIncident.param_id) + '. количество пропущенных точек проверки: ' + str(len(datesTuple)))
+						for dateTuple in datesTuple:
+							date = dateTuple[0]
+							print(date)
+							pIncident.last['lastchecked'] = date
+							a = pIncident.getCurrentIncident()
+							if a['success'] and a['result']: # если в этом промежутке найден инцидент
+								incident = a['result']
+								incidentType = incident['incidentType']
+								# проверяем наличие инцидента такого же типа
+								a = iHandler.getExistingIncident(pIncident.param_id, incidentType)
 								if a['success']:
-									if a['result']:
-										activeTypedIncidentTime = a['result']
-										incidentAge = date - activeTypedIncidentTime
-										print('incident age: ' + str(incidentAge))
-										if incidentAge > timedelta(hours = 1):
-											iHandler.saveIncident(incident)
-											continue
-									iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
-					updateIncidentRegister(pIncident.param_id, date)
+									activeTypedIncident = a['result']
+									# если находим, то проверяем когда он был последний раз проверен
+									a = iHandler.getExistingIncidentLastCheckedTime(activeTypedIncident)
+									if a['success']:
+										if a['result']:
+											activeTypedIncidentTime = a['result']
+											# вычисляем как давно он был проверен последний раз:
+											incidentAge = date - activeTypedIncidentTime
+											print('incident age: ' + str(incidentAge))
+											if incidentAge > timedelta(hours = 1):	 # если последняя проверка инцидента была больше часа назад
+												iHandler.saveIncident(incident)		 # то это уже новый инцидент (старый закрывается вручную)
+												continue 							 # т.е. если инцидент был непрерывен, то новых инцидентов создаваться не будет
+											else: 
+												iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
+						updateIncidentRegister(pIncident.param_id, date)
 
 						
 
@@ -802,5 +807,5 @@ else:
 '''
 
 
-updateIncidentRegister(39, '2019-04-26 11:00:00')
-print(parameterIncidents(55).getLastCheckedTime())
+#updateIncidentRegister(39, '2019-04-26 11:00:00')
+#print(parameterIncidents(55).getLastCheckedTime())
