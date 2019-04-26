@@ -129,7 +129,6 @@ def queryUpdate(query):
 			conn.commit()
 		return {'success': True, 'result': None}
 
-
 def updateIncidentRegister(param_id, lastchecked_time):
 	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id '
 	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
@@ -141,18 +140,12 @@ def updateIncidentRegister(param_id, lastchecked_time):
 			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time)  VALUES ($param_id, $lastchecked_time);  '
 		queryUpdate(prepareQuery(query, args))
 
-
 def getIncidentRegisterDate(param_id):
 	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id '
 	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
 	if queryResult['success']:
 		return queryResult['result']
 	return queryResult
-
-'''
-def getActiveIncidentLastDate(param_id, incident_type):
-	pass
-'''
 
 class resourceParameter:
 	def __init__(self, param_id):
@@ -806,6 +799,3 @@ else:
 	sendEmail(header, message)
 '''
 
-
-#updateIncidentRegister(39, '2019-04-26 11:00:00')
-#print(parameterIncidents(55).getLastCheckedTime())
