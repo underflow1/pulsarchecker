@@ -59,6 +59,14 @@ def getHourDateRange(lastDate):
 	datalist.append(lastDate)
 	return datalist
 
+def getDatesByHour(date_s, date_e):
+	query = ' SELECT "Tepl"."GetDateRange"($date_s, $date_e, \'1 hour\' ) '
+	args = {'date_s': date_s, 'date_e': date_e}
+	query = prepareQuery(query, args)
+	query = queryFetchAll(query)
+	if query['success']:
+		return query['result']
+
 # подставить значение переменных в sql запрос
 def prepareQuery(query, args):
 	arguments = {}
@@ -91,6 +99,21 @@ def queryFetchOne(query):
 			return  {'success': True,  'result': query}
 		return  {'success': False,  'error': False, 'edescription': 'запрос вернул пустой результат'}
 
+def queryFetchAll(query):
+	try:
+		cursor.execute(query)
+		query = cursor.fetchall()
+	except Exception as e:
+		print(e)
+		message = 'При чтении базы данных случилась ошибка: \n' + str(e)
+		header = 'Ошибка мониторинга'
+		sendEmail(header, message)
+		return {'success': False, 'error': e, 'edescription': 'Ошибка чтения базы данных' }
+	else:
+		if query:	
+			return  {'success': True,  'result': query}
+		return  {'success': False,  'error': False, 'edescription': 'запрос вернул пустой результат'}
+
 # выполнить инсерт или апдейт
 def queryUpdate(query):
 		try:
@@ -106,18 +129,30 @@ def queryUpdate(query):
 			conn.commit()
 		return {'success': True, 'result': None}
 
-def updateIncidentRegister(param_id, incident_type, lastchecked):
-	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id and incident_type = $incident_type '
-	args = {'param_id': param_id, 'incident_type': incident_type}
-	queryResult = queryFetchOne(prepareQuery(query, args))
+
+def updateIncidentRegister(param_id, lastchecked_time):
+	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id '
+	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
 	if queryResult['success']:
+		args = {'param_id': param_id, 'lastchecked_time': lastchecked_time}
 		if queryResult['result']:
-			query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked = $lastchecked WHERE param_id = $param_id and incident_type = $incident_type; '
-			args = {'param_id': param_id, 'incident_type': incident_type, 'lastchecked': lastchecked}
+			query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked_time = $lastchecked_time WHERE param_id = $param_id; '
 		else:
-			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked, incident_type)  VALUES ($param_id, $lastchecked, $incident_type);  '
-			args = {'param_id': param_id, 'incident_type': incident_type, 'lastchecked': lastchecked}
+			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time)  VALUES ($param_id, $lastchecked_time);  '
 		queryUpdate(prepareQuery(query, args))
+
+
+def getIncidentRegisterDate(param_id):
+	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id '
+	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
+	if queryResult['success']:
+		return queryResult['result']
+	return queryResult
+
+'''
+def getActiveIncidentLastDate(param_id, incident_type):
+	pass
+'''
 
 class resourceParameter:
 	def __init__(self, param_id):
@@ -244,11 +279,11 @@ class parameterIncidents(resourceParameter):
 				a = self.getLastCheckedTime()
 				if a['success'] and a['result']:
 					self.last['lastCheckedTime'] = a['result']
-					a = self.getLastArchiveData()
-					if a['success'] and a['result']:
+					a = self.getCurrenArchiveValue()
+					if a['success']:
 						self.last['lastArchiveValue'] = a['result']
 						self.dataLoaded = True
-					return
+						return
 			self.error = a['error']
 			self.edescription = a['description']	
 
@@ -265,21 +300,20 @@ class parameterIncidents(resourceParameter):
 
 	def getLastCheckedTime(self):
 		if self.initCompleted:
-			query = ' SELECT lastchecked FROM  "Tepl"."Alerts_register"  WHERE param_id = $param_id AND incident_type = $incident_type '
-			args = {'param_id': self.param_id, 'incident_type': 1}
+			query = ' SELECT lastchecked_time FROM  "Tepl"."Alerts_register"  WHERE param_id = $param_id '
+			args = {'param_id': self.param_id}
 			query = queryFetchOne(prepareQuery(query, args))
 			if query['success']:
 				if query['result']:
 					return {'success': True, 'result': query['result']}
-				a = self.getNewestArchiveTime() 
-				if a['success'] and a['result']:
-					updateIncidentRegister(self.param_id, 1, a['result'])
-					return {'success': True, 'result': a['result'] }
-				return a
-			return query
+			a = self.getNewestArchiveTime() 
+			if a['success'] and a['result']:
+				updateIncidentRegister(self.param_id, a['result'])
+				return {'success': True, 'result': a['result'] }
+			return a
 		return {'success': False, 'error': self.error, 'description': self.edescription}
 
-	def getLastArchiveData(self):
+	def getCurrenArchiveValue(self):
 		if self.initCompleted:
 			a = self.getLastCheckedTime()
 			if a['success'] and a['result']:
@@ -289,10 +323,8 @@ class parameterIncidents(resourceParameter):
 				if query['success']:
 					if query['result']:
 						if self.parameterType == 1:
-							#self.lastArchiveData = round(query[1],2) 
 							return {'success': True, 'result': round(query['result'][1],2)}
 						if self.parameterType == 2: 
-							#self.lastArchiveData = round(query[0],2)
 							return {'success': True, 'result': round(query['result'][0],2)}
 						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
 					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
@@ -302,7 +334,6 @@ class parameterIncidents(resourceParameter):
 
 	def checkConnectionLost(self): #1
 		if self.dataLoaded:
-			#if self.last['newestArchiveTime'] < ( - timedelta(hours = pollhourinterval + pollhourdelta)):
 			if (datetime.now() - self.last['newestArchiveTime']) > timedelta(hours = pollhourinterval + pollhourdelta):
 				return {'success': True, 'result': True}
 			else:
@@ -326,7 +357,7 @@ class parameterIncidents(resourceParameter):
 			args = {'date_s': timerange[0], 'date_e': timerange[1], 'rangetype': rangetype, 'parameterType': self.parameterType, 'param_id': self.param_id}
 			query = queryFetchOne(prepareQuery(query, args))
 			if query['success']:
-				if query['result']:
+				if query['result'] == 0 or query['result']:
 					return {'success': True, 'result': query['result']}
 				return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
 			return query
@@ -390,36 +421,45 @@ class parameterIncidents(resourceParameter):
 			return {'success': False, 'error': self.error, 'description': self.edescription}
 
 	def getCurrentIncident(self):
-		data = self
 		if not self.initCompleted:
-			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': self}}
 		else: 
 			if not self.dataLoaded:
-				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': data}}
+				return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': self}}
 			else:
 				inc = self.checkConnectionLost()
-				if (inc['success'] and inc['result']):
-					return {'success': True, 'result': {'incidentType': 1, 'description': 'Прибор не вышел на связь в установленное время.', 'self': data}}
-				else:
+				if inc['success']:
+					if inc['result']:
+						return {'success': True, 'result': {'incidentType': 1, 'description': 'Прибор не вышел на связь в установленное время.', 'self': self}}
 					if self.parameterType == 1: # 1 - delta (volume)
 						inc = self.checkConsumptionUp()	
-						if (inc['success'] and inc['result']):
-							return {'success': True, 'result': {'incidentType': 2, 'description': 'Зафиксировано повышение расхода контроллируемого параметра.', 'self': data}}
-
-						else:
+						if inc['success']:
+							if inc['result']:
+								return {'success': True, 'result': {'incidentType': 2, 'description': 'Зафиксировано повышение расхода контроллируемого параметра.', 'self': self}}
 							inc = self.checkConsumptionStale()
-							if (inc['success'] and inc['result']):
-								return {'success': True, 'result': {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': data}}
+							if inc['success']:
+								if inc['result']:
+									return {'success': True, 'result': {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': self}}
+							else:
+								{'success': True, 'result': {'incidentType': 3, 'description': inc['description'], 'self': self}}
+						else:
+							return {'success': True, 'result': {'incidentType': 2, 'description': inc['description'], 'self': self}}
 					if self.parameterType == 2: # 2 - value (pressure)
 						inc = self.checkConsumptionUp()
-						if (inc['success'] and inc['result']):
-							return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': data}}
+						if inc['success']:
+							if inc['result']:
+								return {'success': True, 'result': {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': self}}
+						else:
+							return {'success': True, 'result': {'incidentType': 4, 'description': inc['description'], 'self': self}}
+				else: 
+					return {'success': True, 'result': {'incidentType': 1, 'description': inc['description'], 'self': self}}
+
 		return {'success': True, 'result': None}
 
 class parameterBalance(resourceParameter):
 	def __init__(self, id, date):
 		resourceParameter.__init__(self, id)
-		self.date_s = date
+		self.date_s = date + timedelta(days = 1)
 		self.date_e = date + timedelta(days = 1)
 		self.balance = []
 		self.balanceMessage = ''
@@ -534,7 +574,7 @@ class incidentHandler:
 			return {'success': True, 'result': cursor.lastrowid}
 
 	def getExistingIncident(self, param_id, incident_type):
-		query = 'SELECT id FROM "Tepl"."Alert_cnt" WHERE status = \'active\' and param_id = %s and type = %s'
+		query = 'SELECT MAX(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' and param_id = %s and type = %s'
 		args = (param_id, incident_type)
 		try:
 			cursor.execute(query, args)
@@ -546,6 +586,26 @@ class incidentHandler:
 			if query:
 				return {'success': True, 'result': query[0]}
 			return {'success': False, 'result': None}		
+
+	def getExistingIncidentTime(self, incident_id):
+		query = 'SELECT time FROM "Tepl"."Alert_cnt" WHERE id = $incident_id'
+		query = queryFetchOne(prepareQuery(query, {'incident_id': incident_id}))
+		if query:
+			return {'success': True, 'result': query['result']}
+		return {'success': False, 'result': None}		
+
+	def getExistingIncidentLastCheckedTime(self, incident_id):
+		query = 'SELECT lastchecked_time FROM "Tepl"."Alert_cnt" WHERE id = $incident_id'
+		query = queryFetchOne(prepareQuery(query, {'incident_id': incident_id}))
+		if query:
+			return {'success': True, 'result': query['result']}
+		return {'success': False, 'result': None}		
+
+	def updateExistingIncidentLastCheckedTime(self, incident_id, lastchecked_time):
+		query = 'UPDATE "Tepl"."Alert_cnt" SET lastchecked_time = $lastchecked_time WHERE id = $incident_id '
+		args = {'incident_id': incident_id, 'lastchecked_time': lastchecked_time}
+		query = prepareQuery(query, args)
+		query = queryUpdate(query)
 
 def structureIncidents(incidents):
 	emailsubst = {}
@@ -598,6 +658,81 @@ autoclosedIncidentCounter = 0
 savedincidents = []
 
 if len(sys.argv) == 1:
+	parametersList = getParamCheckList()
+	for param_id in parametersList:
+		iHandler = incidentHandler()
+		pIncident = parameterIncidents(param_id)
+		if pIncident.dataLoaded:
+			activeLostIncident = False
+			activeLostIncidentTime = False
+
+			# Проверка наличия активного инцидента connection lost
+			a = iHandler.getExistingIncident(param_id, 1)
+			if a['success']:
+				if a['result']:
+					activeLostIncident = a['result']
+					a= iHandler.getExistingIncidentTime(activeLostIncident)
+					if a['success']:
+						if a['result']:
+							activeLostIncidentTime = a['result']
+
+			# Проверка связи
+			a = pIncident.checkConnectionLost()
+			if a['success']:
+				connectionLost = a['result']
+
+				if connectionLost:  # если связь потеряна
+					if activeLostIncident: # и активный инцидент connection lost существует, то переходим к следующему параметру
+						continue
+					else: # если активного инцдента нет, то его нужно создать
+						iHandler.saveIncident(pIncident.getCurrentIncident())
+						# и обновить время последней проверки
+						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
+						continue
+				else: # если связь в порядке
+					if activeLostIncident: # если есть активный инцидент connection lost, то его надо закрыть
+						iHandler.closeIncident(activeLostIncident, 1)
+						# и обновить время последней проверки
+						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
+
+					# перебираем все инциденты за время прошедшее с момента последней проверки
+					date_s = pIncident.last['lastCheckedTime']
+					date_e = pIncident.last['newestArchiveTime']
+					datesTuple= getDatesByHour(date_s, date_e)
+					print('количество пропущенных точек проверки: ' + str(len(datesTuple)))
+					for dateTuple in datesTuple:
+						date = dateTuple[0]
+						print(date)
+						pIncident.last['lastchecked'] = date
+						a = pIncident.getCurrentIncident()
+						if a['success'] and a['result']:
+							incident = a['result']
+							incidentType = incident['incidentType']
+							a = iHandler.getExistingIncident(pIncident.param_id, incidentType)
+							if a['success']:
+								activeTypedIncident = a['result']
+								a = iHandler.getExistingIncidentLastCheckedTime(activeTypedIncident)
+								if a['success']:
+									if a['result']:
+										activeTypedIncidentTime = a['result']
+										incidentAge = date - activeTypedIncidentTime
+										print('incident age: ' + str(incidentAge))
+										if incidentAge > timedelta(hours = 1):
+											iHandler.saveIncident(incident)
+											continue
+									iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
+					updateIncidentRegister(pIncident.param_id, date)
+
+						
+
+
+
+
+
+					
+
+
+'''	
 	parametersList = getParamCheckList()
 	#parametersList = [48]
 	for param_id in parametersList:
@@ -664,8 +799,8 @@ else:
 	message = dailyReportPart + balancePart
 	header = 'Ежедневная сводка мониторинга за ' + str(date)
 	sendEmail(header, message)
+'''
 
 
-
-updateIncidentRegister(39, 1, '2019-04-26 11:00:00')
+updateIncidentRegister(39, '2019-04-26 11:00:00')
 print(parameterIncidents(55).getLastCheckedTime())
