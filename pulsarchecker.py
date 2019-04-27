@@ -520,7 +520,7 @@ class incidentHandler:
 	def saveIncident(self, incident):
 		pass
 		if len(incident) > 0:
-			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata) \
+			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata, lastchecked_time) \
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 			if not incident['self'].last.get('lastCheckedTime'):
 				d = date(2000, 1, 1)
@@ -537,7 +537,8 @@ class incidentHandler:
 			incident['description'] + ' ' + incident['self'].edescription,
 			incident['self'].metadata['placeCoord'],
 			incident['self'].metadata['placeNameGroup'],
-			incident['self'].last.get('lastArchiveValue')
+			incident['self'].last.get('lastArchiveValue'),
+			incident['self'].last['lastCheckedTime']
 			)
 			try:
 				cursor.execute(query, args)
@@ -678,13 +679,19 @@ if len(sys.argv) == 1:
 					if activeLostIncident: # и активный инцидент connection lost существует, то переходим к следующему параметру
 						continue
 					else: # если активного инцдента нет, то его нужно создать
-						iHandler.saveIncident(pIncident.getCurrentIncident())
-						# и обновить время последней проверки
-						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
-						continue
+						a = pIncident.getCurrentIncident()
+						if a['success']:
+							incident = a['result']
+							iHandler.saveIncident(incident)
+							savedIncidentCounter += 1
+							savedincidents.append(incident)
+							# и обновить время последней проверки
+							updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
+							continue
 				else: # если связь в порядке
 					if activeLostIncident: # если есть активный инцидент connection lost, то его надо закрыть
 						iHandler.closeIncident(activeLostIncident, 1)
+						autoclosedIncidentCounter += 1
 						# и обновить время последней проверки
 						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
 
@@ -716,54 +723,12 @@ if len(sys.argv) == 1:
 											print('incident age: ' + str(incidentAge))
 											if incidentAge > timedelta(hours = 1):	 # если последняя проверка инцидента была больше часа назад
 												iHandler.saveIncident(incident)		 # то это уже новый инцидент (старый закрывается вручную)
+												savedIncidentCounter += 1
+												savedincidents.append(incident)
 												continue 							 # т.е. если инцидент был непрерывен, то новых инцидентов создаваться не будет
 											else: 
 												iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
 						updateIncidentRegister(pIncident.param_id, date)
-
-						
-
-
-
-
-
-					
-
-
-'''	
-	parametersList = getParamCheckList()
-	#parametersList = [48]
-	for param_id in parametersList:
-		autoClosableIncidents = []
-		iHandler = incidentHandler()
-		# проверка наличия открытых инцидентов, которые подвержены автозакрытию
-		for incidentType in autoClosableIncidentTypes:
-			a = iHandler.getExistingIncident(param_id, incidentType)
-			if a['success'] and a['result']:
-				autoClosableIncidents.append(a['result'])
-		# проверка и создание новых инцидентов
-		pIncident = parameterIncidents(param_id)
-		a = pIncident.getCurrentIncident()
-		if a['success']:
-			if a['result']:
-				incident = a['result']
-				a = iHandler.getExistingIncident(param_id, incident['incidentType'])
-				if not (a['success'] and a['result']):
-					a = iHandler.saveIncident(incident)
-					if a['success'] and a['result']:
-						savedIncidentCounter += 1
-						savedincidents.append(incident)
-			else: 
-				incident = None
-		# автозакрытие инцидентов, которые подвержены автозакрытию
-		for aCIncident in autoClosableIncidents:
-			if incident:
-				if incident['incidentType'] not in autoClosableIncidentTypes:
-					iHandler.closeIncident(aCIncident, 1)
-					autoclosedIncidentCounter += 1
-			else:
-				iHandler.closeIncident(aCIncident, 1)
-				autoclosedIncidentCounter += 1
 	print('Новых инцидентов: ' + str(savedIncidentCounter))
 	print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
 
@@ -796,6 +761,8 @@ else:
 		balancePart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span><br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
 	message = dailyReportPart + balancePart
 	header = 'Ежедневная сводка мониторинга за ' + str(date)
-	sendEmail(header, message)
-'''
+	sendEmail(header, message)						
+
+
+
 
