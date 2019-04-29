@@ -685,7 +685,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 1:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -722,7 +722,7 @@ if len(sys.argv) == 2:
 			connectionLost = True
 
 		if connectionLost:  # если связь потеряна
-			if activeLostIncident or activeOtherIncident: # и активный инцидент connection lost существует, то переходим к следующему параметру
+			if activeLostIncident or activeOtherIncident: # и активный инцидент connection lost (или тип:другой) существует , то переходим к следующему параметру
 				continue
 			else: # если активного инцидента нет, то его нужно создать
 				a = pIncident.getCurrentIncident()
