@@ -110,9 +110,7 @@ def queryFetchAll(query):
 		sendEmail(header, message)
 		return {'success': False, 'error': e, 'edescription': 'Ошибка чтения базы данных' }
 	else:
-		if query:	
-			return  {'success': True,  'result': query}
-		return  {'success': False,  'error': False, 'edescription': 'запрос вернул пустой результат'}
+		return  {'success': True,  'result': query}
 
 # выполнить инсерт или апдейт
 def queryUpdate(query):
@@ -452,8 +450,8 @@ class parameterIncidents(resourceParameter):
 class parameterBalance(resourceParameter):
 	def __init__(self, id, date):
 		resourceParameter.__init__(self, id)
-		self.date_s = date + timedelta(days = 1)
-		self.date_e = date + timedelta(days = 1)
+		self.date_s = date
+		self.date_e = date
 		self.balance = []
 		self.balanceMessage = ''
 		self.place = self.metadata['placeId']
@@ -461,6 +459,32 @@ class parameterBalance(resourceParameter):
 		query = filedata.read()
 		arguments = {'date_s': self.date_s, 'date_e': self.date_e, 'place': self.place, 'type_a': 2}
 		self.query = prepareQuery(query, arguments)
+
+	def checkBalanceAvailability(self):
+		query = ' \
+		SELECT places."Name" \
+		FROM "Tepl"."ParamResPlc_cnt" prp \
+		INNER JOIN "Tepl"."Places_cnt" places on prp.plc_id = places.plc_id \
+		LEFT JOIN "Tepl"."Places_cnt" parentplaces on places.plc_id = parentplaces.place_id \
+		WHERE places."Name" not in ( \
+		SELECT places."Name" \
+		FROM "Tepl"."ParamResPlc_cnt" prp \
+		INNER JOIN "Tepl"."Places_cnt" places on prp.plc_id = places.plc_id \
+		LEFT JOIN "Tepl"."Places_cnt" parentplaces on places.plc_id = parentplaces.place_id \
+		LEFT JOIN "Tepl"."Arhiv_cnt" arhiv on prp.prp_id = arhiv.pr_id \
+		WHERE places.place_id = $place_id and prp."ParamRes_id" = 1 and arhiv."DateValue" = $date and arhiv.typ_arh = 2 \
+		) and places.place_id = $place_id and prp."ParamRes_id" = 1;	'
+		args = {'place_id': self.place, 'date': self.date_s}
+		query = prepareQuery(query, args)
+		query = queryFetchAll(query)
+		if query['success']:
+			if len(query['result']) > 0:
+				adresses = []
+				for item in query['result']:
+					adresses.append(item[0])
+				return {'success': False, 'result': adresses}
+			return {'success': True}
+		return query
 		
 	def getBalanceStats(self):
 		if self.query:
@@ -651,7 +675,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 2:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -750,13 +774,17 @@ else:
 		if a.parameterType == 1 and a.placeType == 1:
 			bushes.append(param_id)
 
-	date = date.today() - timedelta(days = 1)
+	date = date.today()
 	a = dailyReport(date)
 	dailyReportPart = a.getReportMessage()
 	balancePart = ''
 	for param_id in bushes:
 		a = parameterBalance(param_id, date)
-		balancePart = balancePart + a.getBalanceMessage()
+		b = a.checkBalanceAvailability()
+		if b['success']:
+			balancePart = balancePart + a.getBalanceMessage()
+		else: 
+			balancePart = '<span>Невозможно построить баланс поскольку по адресам нет данных:</span><br>' + str(b['result']) + '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
 	if balancePart == '':
 		balancePart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span><br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
 	message = dailyReportPart + balancePart
