@@ -96,8 +96,9 @@ def queryFetchOne(query):
 		if query:	
 			if len(query) == 1:
 				return  {'success': True,  'result': query[0]}
-			return  {'success': True,  'result': query}
-		return  {'success': False,  'error': False, 'edescription': 'запрос вернул пустой результат'}
+			else:
+				return  {'success': True,  'result': query}
+		return  {'success': True,  'result': query}
 
 def queryFetchAll(query):
 	try:
@@ -127,22 +128,22 @@ def queryUpdate(query):
 			conn.commit()
 		return {'success': True, 'result': None}
 
-def updateIncidentRegister(param_id, lastchecked_time):
-	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id '
-	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
+def updateIncidentRegister(param_id, lastchecked_time, regtype):
+	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype= $regtype'
+	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id, 'regtype': regtype}))
 	if queryResult['success']:
-		args = {'param_id': param_id, 'lastchecked_time': lastchecked_time}
+		args = {'param_id': param_id, 'lastchecked_time': lastchecked_time, 'regtype': regtype}
 		if queryResult['result']:
-			query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked_time = $lastchecked_time WHERE param_id = $param_id; '
+			query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked_time = $lastchecked_time WHERE param_id = $param_id and regtype= $regtype; '
 		else:
-			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time)  VALUES ($param_id, $lastchecked_time);  '
+			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time, regtype)  VALUES ($param_id, $lastchecked_time, $regtype);  '
 		queryUpdate(prepareQuery(query, args))
 
-def getIncidentRegisterDate(param_id):
-	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id '
-	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id}))
+def getIncidentRegisterDate(param_id, regtype):
+	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype = $regtype '
+	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id, 'regtype': regtype}))
 	if queryResult['success']:
-		return queryResult['result']
+		return{'success': True, 'result': queryResult['result']}
 	return queryResult
 
 class resourceParameter:
@@ -291,16 +292,17 @@ class parameterIncidents(resourceParameter):
 
 	def getLastCheckedTime(self):
 		if self.initCompleted:
-			query = ' SELECT lastchecked_time FROM  "Tepl"."Alerts_register"  WHERE param_id = $param_id '
-			args = {'param_id': self.param_id}
-			query = queryFetchOne(prepareQuery(query, args))
-			if query['success']:
-				if query['result']:
-					return {'success': True, 'result': query['result']}
-			a = self.getNewestArchiveTime() 
-			if a['success'] and a['result']:
-				updateIncidentRegister(self.param_id, a['result'])
-				return {'success': True, 'result': a['result'] }
+			a = getIncidentRegisterDate(self.param_id, 'incident')
+			if a['success']:
+				if a['result']:
+					return {'success': True, 'result': a['result']}
+				else: 
+					a = self.getNewestArchiveTime() 
+					if a['success']:
+						if a['result']:
+							updateIncidentRegister(self.param_id, a['result'], 'incident')
+							return {'success': True, 'result': a['result'] }
+					return a
 			return a
 		return {'success': False, 'error': self.error, 'description': self.edescription}
 
@@ -542,10 +544,9 @@ class dailyReport():
 
 class incidentHandler:
 	def saveIncident(self, incident):
-		pass
 		if len(incident) > 0:
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata, lastchecked_time) \
-			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
+			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
 			if not incident['self'].last.get('lastCheckedTime'):
 				d = date(2000, 1, 1)
 				t = time(00, 00)
@@ -675,84 +676,97 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 2:
+if len(sys.argv) == 1:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
 		pIncident = parameterIncidents(param_id)
-		if pIncident.dataLoaded:
-			activeLostIncident = False
-			activeLostIncidentTime = False
+		activeLostIncident = False
+		activeOtherIncident = False
+		activeOtherIncidentTime = False
+		activeLostIncidentTime = False
 
-			# Проверка наличия активного инцидента connection lost
-			a = iHandler.getExistingIncident(param_id, 1)
-			if a['success']:
-				if a['result']:
-					activeLostIncident = a['result']
-					a= iHandler.getExistingIncidentTime(activeLostIncident)
-					if a['success']:
-						if a['result']:
-							activeLostIncidentTime = a['result']
+		# Проверка наличия активного инцидента connection lost
+		a = iHandler.getExistingIncident(param_id, 1)
+		if a['success']:
+			if a['result']:
+				activeLostIncident = a['result']
+				a= iHandler.getExistingIncidentTime(activeLostIncident)
+				if a['success']:
+					if a['result']:
+						activeLostIncidentTime = a['result']
 
-			# Проверка связи
-			a = pIncident.checkConnectionLost()
-			if a['success']:
-				connectionLost = a['result']
+		a = iHandler.getExistingIncident(param_id, 5)
+		if a['success']:
+			if a['result']:
+				activeOtherIncident = a['result']
+				a= iHandler.getExistingIncidentTime(activeOtherIncident)
+				if a['success']:
+					if a['result']:
+						activeOtherIncidentTime = a['result']
 
-				if connectionLost:  # если связь потеряна
-					if activeLostIncident: # и активный инцидент connection lost существует, то переходим к следующему параметру
-						continue
-					else: # если активного инцдента нет, то его нужно создать
-						a = pIncident.getCurrentIncident()
-						if a['success']:
-							incident = a['result']
-							iHandler.saveIncident(incident)
-							savedIncidentCounter += 1
-							savedincidents.append(incident)
-							# и обновить время последней проверки
-							updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
-							continue
-				else: # если связь в порядке
-					if activeLostIncident: # если есть активный инцидент connection lost, то его надо закрыть
-						iHandler.closeIncident(activeLostIncident, 1)
-						autoclosedIncidentCounter += 1
-						# и обновить время последней проверки
-						updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'])
+		# Проверка связи
+		a = pIncident.checkConnectionLost()
+		if a['success']:
+			connectionLost = a['result']
+		else:
+			connectionLost = True
 
-					# перебираем все инциденты за время прошедшее с момента последней проверки
-					datesTuple= getDatesByHour(pIncident.last['lastCheckedTime'], pIncident.last['newestArchiveTime'])
-					if len(datesTuple) == 1:
-						print('Параметр ' + str(pIncident.param_id) + ' уже проверен ранее')
-					else:
-						print('Параметр: ' + str(pIncident.param_id) + '. количество пропущенных точек проверки: ' + str(len(datesTuple)))
-						for dateTuple in datesTuple:
-							date = dateTuple[0]
-							print(date)
-							pIncident.last['lastchecked'] = date
-							a = pIncident.getCurrentIncident()
-							if a['success'] and a['result']: # если в этом промежутке найден инцидент
-								incident = a['result']
-								incidentType = incident['incidentType']
-								# проверяем наличие инцидента такого же типа
-								a = iHandler.getExistingIncident(pIncident.param_id, incidentType)
-								if a['success']:
-									activeTypedIncident = a['result']
-									# если находим, то проверяем когда он был последний раз проверен
-									a = iHandler.getExistingIncidentLastCheckedTime(activeTypedIncident)
-									if a['success']:
-										if a['result']:
-											activeTypedIncidentTime = a['result']
-											# вычисляем как давно он был проверен последний раз:
-											incidentAge = date - activeTypedIncidentTime
-											print('incident age: ' + str(incidentAge))
-											if incidentAge > timedelta(hours = 1):	 # если последняя проверка инцидента была больше часа назад
-												iHandler.saveIncident(incident)		 # то это уже новый инцидент (старый закрывается вручную)
-												savedIncidentCounter += 1
-												savedincidents.append(incident)
-												continue 							 # т.е. если инцидент был непрерывен, то новых инцидентов создаваться не будет
-											else: 
-												iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
-						updateIncidentRegister(pIncident.param_id, date)
+		if connectionLost:  # если связь потеряна
+			if activeLostIncident or activeOtherIncident: # и активный инцидент connection lost существует, то переходим к следующему параметру
+				continue
+			else: # если активного инцидента нет, то его нужно создать
+				a = pIncident.getCurrentIncident()
+				if a['success']:
+					incident = a['result']
+					iHandler.saveIncident(incident)
+					savedIncidentCounter += 1
+					savedincidents.append(incident)
+					# и обновить время последней проверки
+					updateIncidentRegister(pIncident.param_id, pIncident.last['lastCheckedTime'], 'incident')
+					continue
+		else: # если связь в порядке
+			if activeLostIncident: # если есть активный инцидент connection lost, то его надо закрыть
+				iHandler.closeIncident(activeLostIncident, 1)
+				autoclosedIncidentCounter += 1
+				# и обновить время последней проверки
+				updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'], 'incident')
+
+			# перебираем все инциденты за время прошедшее с момента последней проверки
+			datesTuple= getDatesByHour(pIncident.last['lastCheckedTime'], pIncident.last['newestArchiveTime'])
+			if len(datesTuple) == 1:
+				print('Параметр ' + str(pIncident.param_id) + ' уже проверен ранее')
+			else:
+				print('Параметр: ' + str(pIncident.param_id) + '. количество пропущенных точек проверки: ' + str(len(datesTuple)))
+				for dateTuple in datesTuple:
+					date = dateTuple[0]
+					print(date)
+					pIncident.last['lastchecked'] = date
+					a = pIncident.getCurrentIncident()
+					if a['success'] and a['result']: # если в этом промежутке найден инцидент
+						incident = a['result']
+						incidentType = incident['incidentType']
+						# проверяем наличие инцидента такого же типа
+						a = iHandler.getExistingIncident(pIncident.param_id, incidentType)
+						if a['success'] and a['result']:
+							activeTypedIncident = a['result']
+							# если находим, то проверяем когда он был последний раз проверен
+							a = iHandler.getExistingIncidentLastCheckedTime(activeTypedIncident)
+							if a['success']:
+								if a['result']:
+									activeTypedIncidentTime = a['result']
+									# вычисляем как давно он был проверен последний раз:
+									incidentAge = date - activeTypedIncidentTime
+									print('incident age: ' + str(incidentAge))
+									if incidentAge > timedelta(hours = 1):	 # если последняя проверка инцидента была больше часа назад
+										iHandler.saveIncident(incident)		 # то это уже новый инцидент (старый закрывается вручную)
+										savedIncidentCounter += 1
+										savedincidents.append(incident)
+										continue 							 # т.е. если инцидент был непрерывен, то новых инцидентов создаваться не будет
+									else: 
+										iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
+				updateIncidentRegister(pIncident.param_id, date, 'incident')
+			
 	print('Новых инцидентов: ' + str(savedIncidentCounter))
 	print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
 
