@@ -67,6 +67,15 @@ def getDatesByHour(date_s, date_e):
 	if query['success']:
 		return query['result']
 
+def getDatesByDays(date_s, date_e):
+	query = ' SELECT "Tepl"."GetDateRange"($date_s, $date_e, \'1 day\' ) '
+	args = {'date_s': date_s, 'date_e': date_e}
+	query = prepareQuery(query, args)
+	query = queryFetchAll(query)
+	if query['success']:
+		return query['result']
+
+
 # подставить значение переменных в sql запрос
 def prepareQuery(query, args):
 	arguments = {}
@@ -462,7 +471,7 @@ class parameterBalance(resourceParameter):
 		arguments = {'date_s': self.date_s, 'date_e': self.date_e, 'place': self.place, 'type_a': 2}
 		self.query = prepareQuery(query, arguments)
 
-	def checkBalanceAvailability(self):
+	def checkBalanceAvailability(self, date):
 		query = ' \
 		SELECT places."Name" \
 		FROM "Tepl"."ParamResPlc_cnt" prp \
@@ -476,7 +485,7 @@ class parameterBalance(resourceParameter):
 		LEFT JOIN "Tepl"."Arhiv_cnt" arhiv on prp.prp_id = arhiv.pr_id \
 		WHERE places.place_id = $place_id and prp."ParamRes_id" = 1 and arhiv."DateValue" = $date and arhiv.typ_arh = 2 \
 		) and places.place_id = $place_id and prp."ParamRes_id" = 1;	'
-		args = {'place_id': self.place, 'date': self.date_s}
+		args = {'place_id': self.place, 'date': date}
 		query = prepareQuery(query, args)
 		query = queryFetchAll(query)
 		if query['success']:
@@ -676,7 +685,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 2:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -791,17 +800,45 @@ else:
 	date = date.today()
 	a = dailyReport(date)
 	dailyReportPart = a.getReportMessage()
-	balancePart = ''
+
+	balancePart = []
 	for param_id in bushes:
-		a = parameterBalance(param_id, date)
-		b = a.checkBalanceAvailability()
-		if b['success']:
-			balancePart = balancePart + a.getBalanceMessage()
+		a = getIncidentRegisterDate(param_id, 'balance')
+		if a['success']:
+			if a['result']:
+				last = a['result']
+			else:
+				last = date
 		else: 
-			balancePart = '<span>Невозможно построить баланс поскольку по адресам нет данных:</span><br>' + str(b['result']) + '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
-	if balancePart == '':
-		balancePart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span><br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
-	message = dailyReportPart + balancePart
+			last = date
+		range = getDatesByDays(last, date)
+		for dt in range:
+			a = parameterBalance(param_id, dt[0])
+			b = a.checkBalanceAvailability(dt[0])
+			if b['success']:
+				b = a.checkBalanceAvailability(dt[0] - timedelta(days = 1))
+				if b['success']:
+					b = a.getBalanceMessage()
+					updateIncidentRegister(param_id, date, 'balance')
+					if b == '':
+						continue
+					else:
+						balancePart.append(b)
+						a.last = {'lastCheckedTime': dt[0]}
+						balanceIncident = {'description': 'Небаланс', 'incidentType': 6, 'self': a}
+						iHandler = incidentHandler()
+						iHandler.saveIncident(balanceIncident)		
+			addr = "<br>".join(str(x) for x in b['result'])
+			balancePart.append('<span><strong>' + dt[0].strftime("%Y-%m-%d") + ':<br>' + a.metadata['placeTypeName'] + ' ' + a.metadata['placeName'] + ':</strong> невозможно построить баланс. Нехватает данных по адресам:<br>' + addr +"</span>")
+
+	balanceReportPart = ''
+	footer = '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
+	if len(balancePart) == 0:
+		balancePart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span>'
+	else:
+		balanceReportPart = "<br><br>".join(str(x) for x in balancePart)
+
+	message = dailyReportPart + balanceReportPart + footer
 	header = 'Ежедневная сводка мониторинга за ' + str(date)
 	sendEmail(header, message)						
 
