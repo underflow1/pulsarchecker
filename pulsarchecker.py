@@ -525,23 +525,23 @@ class dailyReport():
 		stats = {}
 		args = {'date_s': self.date_s, 'date_e': self.date_e}
 		query = queryFetchOne(' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' ')
-		if query['success'] and query['result']:
+		if query['success']:
 			stats['Активных инцидентов на данный момент'] = query['result']	
 
 		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > $date_s and created_at < $date_e '
 		query = prepareQuery(query, args)
 		query = queryFetchOne(query)
-		if query['success'] and query['result']:
+		if query['success']:
 			stats['Создано новых инцидентов за прошедший день'] = query['result']	
 
 		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > $date_s and updated_at < $date_e '
 		query = queryFetchOne((prepareQuery(query, args)))
-		if query['success'] and query['result']:
+		if query['success']:
 			stats['Инцидентов закрытых автоматически']  = query['result']
 
 		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > $date_s and updated_at < $date_e '
 		query = queryFetchOne((prepareQuery(query, args)))
-		if query['success'] and query['result']:
+		if query['success']:
 			stats['Инцидентов закрытых вручную'] = query['result']
 
 		return stats
@@ -685,7 +685,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 2:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -798,7 +798,7 @@ else:
 			bushes.append(param_id)
 
 	date = date.today()
-	a = dailyReport(date)
+	a = dailyReport(date - timedelta(days = 1) )
 	dailyReportPart = a.getReportMessage()
 
 	balancePart = []
@@ -834,7 +834,7 @@ else:
 	balanceReportPart = ''
 	footer = '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
 	if len(balancePart) == 0:
-		balancePart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span>'
+		balanceReportPart = '<span>Отклонений по балансу за прошедший день не обнаружено.</span>'
 	else:
 		balanceReportPart = "<br><br>".join(str(x) for x in balancePart)
 
