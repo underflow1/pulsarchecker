@@ -27,8 +27,10 @@
 
 	CREATE TEMPORARY TABLE date_range_tmp
 		(
-		"DateValue" timestamp without time zone
+		"DateValue" timestamp without time zone,
+		"DateValueStrict" timestamp without time zone
 		);
+
 
 	INSERT INTO date_range_tmp("DateValue")
 		SELECT CASE
@@ -39,6 +41,9 @@
 			WHEN $type_a = 3 THEN 
 			"Tepl"."GetDateRange"($date_s, $date_e, '1 month')
 			END;
+
+	UPDATE date_range_tmp
+		SET "DateValueStrict" = "DateValue" - interval '1 second';
 
 -- подгружаем архивные данные для всех приборов:
 INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue", "Delta")
@@ -53,11 +58,11 @@ INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue", "Delta")
 -- указываем смещение начальной даты, для того чтобы в отчете не было пустой первой строки:
 		AND CASE
 			WHEN $type_a = 1 THEN 
-				"DateValue" BETWEEN timestamp $date_s - interval '1 hour'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s + interval '1 hour'  AND timestamp $date_e
 			WHEN $type_a = 2 THEN 
-				"DateValue" BETWEEN timestamp $date_s - interval '1 day'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s + interval '1 day'  AND timestamp $date_e
 			WHEN $type_a = 3 THEN 
-				"DateValue" BETWEEN timestamp $date_s - interval '1 month'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s + interval '1 month'  AND timestamp $date_e
 			END
 	);
 
@@ -68,17 +73,17 @@ SELECT
 	FROM
 	(
 	SELECT
-	dts.date as "F0", -- выбираем даты из таблицы-столбца дат
+	dts."DateValueStrict" as "F0", -- выбираем даты из таблицы-столбца дат
 	CAST(SUM(a1."Delta") as double precision) as "F2" 
 	--CAST(SUM(1) as double precision) as "F2" 
 	--CAST(SUM(a1."DataValue" - a_prev1."DataValue") as double precision) as "F2"
 
 	FROM "Tepl"."Places_cnt" p
 	INNER JOIN "Tepl"."PlaceTyp_cnt" pt ON p.typ_id = pt.typ_id
-	INNER JOIN date_range_tmp dts(date) ON 1=1
+	INNER JOIN date_range_tmp dts ON 1=1
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
 	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
-	AND a1."DateValue" = dts.date
+	AND a1."DateValue" = dts."DateValue"
 	
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
 	
@@ -93,19 +98,18 @@ SELECT
 	FROM
 	(
 	SELECT
-	dts.date as "F0",
+	dts."DateValueStrict" as "F0",
 	a1."Delta" as  "F1" 
 	FROM "Tepl"."Places_cnt" p 
-	INNER JOIN date_range_tmp dts(date) ON 1=1 
+	INNER JOIN date_range_tmp dts ON 1=1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
 	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
-	AND a1."DateValue" = dts.date
+	AND a1."DateValue" = dts."DateValue"
 
 	WHERE p.plc_id = $place
 	ORDER BY "F0"
 	) results ;
-
 
 	SELECT dp."F0", dp."F1" as "F5" , dc."F2" as "F10", dc."F2" - dp."F1" AS "F15", ((dc."F2" - dp."F1") / dp."F1" * 100) AS "F20"
 
