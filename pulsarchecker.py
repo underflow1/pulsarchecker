@@ -685,7 +685,7 @@ savedIncidentCounter = 0
 autoclosedIncidentCounter = 0
 savedincidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) == 2:
 	parametersList = getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -826,9 +826,12 @@ else:
 		range = getDatesByDays(last, date)
 		for dt in range:
 			a = parameterBalance(param_id, dt[0])
-			b = a.checkBalanceAvailability(dt[0])
+			checkingDate = dt[0]
+			b = a.checkBalanceAvailability(checkingDate)
+			addr = ''
 			if b['success']:
-				b = a.checkBalanceAvailability(dt[0] - timedelta(days = 1))
+				checkingDate = dt[0] -  timedelta(days = 1)
+				b = a.checkBalanceAvailability(checkingDate)
 				if b['success']:
 					b = a.getBalanceMessage()
 					updateIncidentRegister(param_id, date, 'balance')
@@ -836,12 +839,16 @@ else:
 						continue
 					else:
 						balancePart.append(b)
-						a.last = {'lastCheckedTime': dt[0]}
+						a.last = {'lastChecked': dt[0]}
 						balanceIncident = {'description': 'Небаланс', 'incidentType': 6, 'self': a}
 						iHandler = incidentHandler()
 						iHandler.saveIncident(balanceIncident)		
-			addr = "<br>".join(str(x) for x in b['result'])
-			balancePart.append('<span><strong>' + dt[0].strftime("%Y-%m-%d") + ':<br>' + a.metadata['placeTypeName'] + ' ' + a.metadata['placeName'] + ':</strong> невозможно построить баланс. Нехватает данных по адресам:<br>' + addr +"</span>")
+				else:
+					addr = "<br>".join(str(x) for x in b['result'])
+			else:
+				addr = "<br>".join(str(x) for x in b['result'])
+			if addr:
+				balancePart.append('<span><strong>' + checkingDate.strftime("%Y-%m-%d") + ':<br>' + a.metadata['placeTypeName'] + ' ' + a.metadata['placeName'] + ':</strong> невозможно построить баланс. Нехватает данных по адресам:<br>' + addr +"</span>")
 
 	balanceReportPart = ''
 	footer = '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
