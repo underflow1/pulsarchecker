@@ -275,8 +275,7 @@ class parameterIncidents(resourceParameter):
 		self.dataLoaded = False
 		if self.initCompleted:
 			a = self.getNewestArchiveTime()
-			if a['success'] and a['result']:
-				self.last['newestArchiveTime'] = a['result']
+			if a is True:
 				a = self.getLastCheckedTime()
 				if a['success'] and a['result']:
 					self.last['lastCheckedTime'] = a['result']
@@ -294,7 +293,8 @@ class parameterIncidents(resourceParameter):
 			query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id}))
 			if query['success']:
 				if query['result']:
-					return {'success': True, 'result': query['result']}
+					self.last['newestArchiveTime'] = query['result']
+					return True
 				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
 			return query
 		return {'success': False, 'error': self.error, 'description': self.edescription}
@@ -307,10 +307,9 @@ class parameterIncidents(resourceParameter):
 					return {'success': True, 'result': a['result']}
 				else: 
 					a = self.getNewestArchiveTime() 
-					if a['success']:
-						if a['result']:
-							updateIncidentRegister(self.param_id, a['result'], 'incident')
-							return {'success': True, 'result': a['result'] }
+					if a is True:
+						updateIncidentRegister(self.param_id, self.last['newestArchiveTime'], 'incident')
+						return {'success': True, 'result': a['result'] }
 					return a
 			return a
 		return {'success': False, 'error': self.error, 'description': self.edescription}
@@ -320,13 +319,16 @@ class parameterIncidents(resourceParameter):
 			a = self.getLastCheckedTime()
 			if a['success'] and a['result']:
 				lastCheckedTime = a['result']
-				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastCheckedTime '				
-				query = queryFetchOne(prepareQuery(query, {'param_id': self.param_id, 'lastCheckedTime': lastCheckedTime}))
+				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastCheckedTime '	
+				query = prepareQuery(query, {'param_id': self.param_id, 'lastCheckedTime': lastCheckedTime})			
+				query = queryFetchOne(query)
 				if query['success']:
 					if query['result']:
 						if self.parameterType == 1:
+							self.last['lastArchiveValue'] = round(query['result'][1],2)
 							return {'success': True, 'result': round(query['result'][1],2)}
 						if self.parameterType == 2: 
+							self.last['lastArchiveValue'] = round(query['result'][0],2)
 							return {'success': True, 'result': round(query['result'][0],2)}
 						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
 					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
