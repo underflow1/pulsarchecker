@@ -370,7 +370,7 @@ class parameterIncidents(resourceParameter):
 			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getWeekDateRange(self.last['lastCheckedTime'])
+				range = getWeekDateRange(self.last['lastChecked'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
@@ -391,7 +391,7 @@ class parameterIncidents(resourceParameter):
 			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getHourDateRange(self.last['lastCheckedTime'])
+				range = getHourDateRange(self.last['lastChecked'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
@@ -409,7 +409,7 @@ class parameterIncidents(resourceParameter):
 			if not  self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
 				return {'success': False, 'error': True, 'description': "С начала сбора данных прошло слишком мало времени. Определить среднее значение невозможно" }
 			else:
-				range = getHourDateRange(self.last['lastCheckedTime'])
+				range = getHourDateRange(self.last['lastChecked'])
 				a = self.getAverageValue(range)
 				if a['success']:
 					averageValue = a['result']
@@ -556,12 +556,12 @@ class incidentHandler:
 		if len(incident) > 0:
 			query = 'INSERT INTO "Tepl"."Alert_cnt"("time", param_id, type, param_name, place_id, "PARENT", "CHILD", description, staticmap, namegroup, lastarchivedata, lastchecked_time) \
 			VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s); '
-			if not incident['self'].last.get('lastCheckedTime'):
+			if not incident['self'].last.get('lastChecked'):
 				d = date(2000, 1, 1)
 				t = time(00, 00)
-				incident['self'].last['lastCheckedTime'] = datetime.combine(d, t)
+				incident['self'].last['lastChecked'] = datetime.combine(d, t)
 			args = (
-			incident['self'].last['lastCheckedTime'],
+			incident['self'].last['lastChecked'],
 			incident['self'].param_id,
 			incident['incidentType'],
 			incident['self'].metadata['paramName'],
@@ -572,7 +572,7 @@ class incidentHandler:
 			incident['self'].metadata['placeCoord'],
 			incident['self'].metadata['placeNameGroup'],
 			incident['self'].last.get('lastArchiveValue'),
-			incident['self'].last['lastCheckedTime']
+			incident['self'].last['lastChecked']
 			)
 			try:
 				cursor.execute(query, args)
@@ -731,14 +731,14 @@ if len(sys.argv) == 1:
 					iHandler.saveIncident(incident)
 					savedIncidentCounter += 1
 					savedincidents.append(incident)
-					# и обновить время последней проверки
-					updateIncidentRegister(pIncident.param_id, pIncident.last['lastCheckedTime'], 'incident')
+					# и обновить время последней проверки в регистре
+					updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'], 'incident')
 					continue
 		else: # если связь в порядке
 			if activeLostIncident: # если есть активный инцидент connection lost, то его надо закрыть
 				iHandler.closeIncident(activeLostIncident, 1)
 				autoclosedIncidentCounter += 1
-				# и обновить время последней проверки
+				# и обновить время последней проверки в регистре
 				updateIncidentRegister(pIncident.param_id, pIncident.last['newestArchiveTime'], 'incident')
 
 			# перебираем все инциденты за время прошедшее с момента последней проверки
@@ -750,7 +750,7 @@ if len(sys.argv) == 1:
 				for dateTuple in datesTuple:
 					date = dateTuple[0]
 					print(date)
-					pIncident.last['lastchecked'] = date
+					pIncident.last['lastChecked'] = date
 					a = pIncident.getCurrentIncident()
 					if a['success'] and a['result']: # если в этом промежутке найден инцидент
 						incident = a['result']
@@ -774,8 +774,20 @@ if len(sys.argv) == 1:
 										continue 							 # т.е. если инцидент был непрерывен, то новых инцидентов создаваться не будет
 									else: 
 										iHandler.updateExistingIncidentLastCheckedTime(activeTypedIncident, date)
+						# если такого же активного инцидента не находим, то его нужно создать
+						else:
+							iHandler.saveIncident(incident)
+							savedIncidentCounter += 1
+							savedincidents.append(incident)
+							# и обновить время последней проверки в регистре
+							updateIncidentRegister(pIncident.param_id, date, 'incident')			
+
 				updateIncidentRegister(pIncident.param_id, date, 'incident')
 			
+# лирическое отступление: 
+# pIncident.last['lastCheckedTime'] это время записаное в регистр
+# pIncident.last['lastChecked'] это время последней проверки в цикле
+
 	print('Новых инцидентов: ' + str(savedIncidentCounter))
 	print('Автоматически закрытых инцидентов: ' + str(autoclosedIncidentCounter))
 
