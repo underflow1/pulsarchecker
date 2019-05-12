@@ -18,7 +18,7 @@ balanceQueryFile = folder + dirsep + 'balance.sql'
 incidentsNoticeTemplate = folder +'email.html'
 balanceNoticeTemplate = folder +'balance.html'
 dailyReportNoticeTemplate = folder +'dailyreport.html'
-
+#+
 def read_config(section):
     parser = ConfigParser()
     parser.read(configfile)
@@ -31,7 +31,7 @@ def read_config(section):
         raise Exception('{0} not found in the {1} file'.format(section, configfile))
  
     return db
-
+#+
 # return: list список идентификаторов параметров, по которым идёт сбор данных
 def getParamCheckList():
 	query = ' \
@@ -44,21 +44,21 @@ def getParamCheckList():
 		for el in item:
 			params.append(el)
 	return params
-
+#+
 # return: list ([0] - начало, [1] - конец)
 def getWeekDateRange(lastDate):
 	datalist = []
 	datalist.append(lastDate - timedelta(days = averageweekdays))
 	datalist.append(lastDate - timedelta(days = 1))
 	return datalist
-
+#+
 # return: list ([0] - начало, [1] - конец)
 def getHourDateRange(lastDate):
 	datalist = []
 	datalist.append(lastDate - timedelta(hours = pollhourinterval))
 	datalist.append(lastDate)
 	return datalist
-
+#+
 def getDatesByHour(date_s, date_e):
 	query = ' SELECT "Tepl"."GetDateRange"($date_s, $date_e, \'1 hour\' ) '
 	args = {'date_s': date_s, 'date_e': date_e}
@@ -66,7 +66,7 @@ def getDatesByHour(date_s, date_e):
 	query = queryFetchAll(query)
 	if query['success']:
 		return query['result']
-
+#+
 def getDatesByDays(date_s, date_e):
 	query = ' SELECT "Tepl"."GetDateRange"($date_s, $date_e, \'1 day\' ) '
 	args = {'date_s': date_s, 'date_e': date_e}
@@ -75,7 +75,7 @@ def getDatesByDays(date_s, date_e):
 	if query['success']:
 		return query['result']
 
-
+#+
 # подставить значение переменных в sql запрос
 def prepareQuery(query, args):
 	arguments = {}
@@ -89,7 +89,7 @@ def prepareQuery(query, args):
 		replacewith = arguments[arg]
 		query = query.replace(find, replacewith)
 	return query
-	
+#-
 # выполнить query fetchone
 def queryFetchOne(query):
 	try:
@@ -108,7 +108,7 @@ def queryFetchOne(query):
 			else:
 				return  {'success': True,  'result': query}
 		return  {'success': True,  'result': query}
-
+#+
 def queryFetchAll(query):
 	try:
 		cursor.execute(query)
@@ -121,7 +121,7 @@ def queryFetchAll(query):
 		return {'success': False, 'error': e, 'edescription': 'Ошибка чтения базы данных' }
 	else:
 		return  {'success': True,  'result': query}
-
+#+
 # выполнить инсерт или апдейт
 def queryUpdate(query):
 		try:
@@ -136,7 +136,7 @@ def queryUpdate(query):
 		else:
 			conn.commit()
 		return {'success': True, 'result': None}
-
+#+
 def updateIncidentRegister(param_id, lastchecked_time, regtype):
 	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype= $regtype'
 	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id, 'regtype': regtype}))
@@ -147,7 +147,7 @@ def updateIncidentRegister(param_id, lastchecked_time, regtype):
 		else:
 			query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time, regtype)  VALUES ($param_id, $lastchecked_time, $regtype);  '
 		queryUpdate(prepareQuery(query, args))
-
+#+
 def getIncidentRegisterDate(param_id, regtype):
 	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype = $regtype '
 	queryResult = queryFetchOne(prepareQuery(query, {'param_id': param_id, 'regtype': regtype}))
@@ -155,6 +155,7 @@ def getIncidentRegisterDate(param_id, regtype):
 		return{'success': True, 'result': queryResult['result']}
 	return queryResult
 
+#+
 class resourceParameter:
 	def __init__(self, param_id):
 		self.param_id = param_id
@@ -286,7 +287,7 @@ class parameterIncidents(resourceParameter):
 						return
 			self.error = a['error']
 			self.edescription = a['description']	
-
+#+
 	def getNewestArchiveTime(self):
 		if self.initCompleted:
 			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '
