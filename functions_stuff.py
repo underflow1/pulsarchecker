@@ -1,19 +1,22 @@
 from datetime import datetime, timedelta, date, time
 from functions_db import db
-averagedays = 7
-averagehours = 2
+from functions_config import config
+from jinja2 import Template
+from email.mime.text import MIMEText
+from email.header import Header
+import smtplib
 
 # return: list ([0] - начало, [1] - конец)
 def getWeekAverageDateRange(lastDate):
 	datalist = []
-	datalist.append(lastDate - timedelta(days = averagedays))
+	datalist.append(lastDate - timedelta(days = config.averagedays))
 	datalist.append(lastDate - timedelta(days = 1))
 	return datalist
 
 # return: list ([0] - начало, [1] - конец)
 def getHourAverageDateRange(lastDate):
 	datalist = []
-	datalist.append(lastDate - timedelta(hours = averagehours))
+	datalist.append(lastDate - timedelta(hours = config.averagehours))
 	datalist.append(lastDate)
 	return datalist
 
@@ -75,3 +78,20 @@ def getIncidentRegisterDate(param_id, regtype):
 		else:
 			raise Exception('Ошибка в регистре')
 	return False
+
+def fillTemplate(templatefile, subst):
+	if len(subst) > 0:
+		html = open(templatefile).read()
+		template = Template(html)
+		message = template.render(subst=subst)
+		return message
+
+def sendEmail(header, message):
+	recipients_emails = config.get('email', 'recipients_emails').split(',')
+	msg = MIMEText(message, 'html', 'utf-8')
+	msg['Subject'] = Header(header, 'utf-8')
+	msg['From'] = "Система мониторинга <monitoring@rsks.su>"
+	msg['To'] = ", ".join(recipients_emails)
+	server = smtplib.SMTP(config.get('email', 'host'))
+	server.sendmail(msg['From'], recipients_emails, msg.as_string())
+	server.quit()		

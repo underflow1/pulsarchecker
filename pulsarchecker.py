@@ -314,7 +314,7 @@ class parameterIncidents(resourceParameter):
 					return a
 			return a
 		return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def getCurrenArchiveValue(self):
 		if self.initCompleted:
 			a = self.getLastCheckedTime()
@@ -345,7 +345,7 @@ class parameterIncidents(resourceParameter):
 				return {'success': True, 'result': False}
 		else:
 			return {'success': False, 'error': self.error, 'description': self.edescription}
-		
+#+		
 	def getAverageValue(self, timerange):
 		if self.dataLoaded:
 			if timerange[1] - timerange[0] > timedelta(hours = 24):
@@ -367,7 +367,7 @@ class parameterIncidents(resourceParameter):
 				return {'success': False, 'error': True, 'description': 'Среднее значение не определено'}
 			return query
 		return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def checkConsumptionUp(self):
 		if self.dataLoaded:
 			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(days = averageweekdays)):
@@ -388,7 +388,7 @@ class parameterIncidents(resourceParameter):
 					return {'success': False, 'error': a['error'], 'description': a['description'] }
 		else:
 			return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def checkConsumptionStale(self):
 		if self.dataLoaded:
 			if not self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
@@ -406,7 +406,7 @@ class parameterIncidents(resourceParameter):
 					return {'success': False, 'error': a['error'], 'description': a['description'] }
 		else:
 			return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def checkValueDown(self):
 		if self.dataLoaded:
 			if not  self.last['lastCheckedTime'] >= (self.metadata['paramStartDate'] + timedelta(hours = pollhourinterval)):
@@ -424,7 +424,7 @@ class parameterIncidents(resourceParameter):
 					return {'success': False, 'error': a['error'], 'description': a['description'] }					
 		else:
 			return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def getCurrentIncident(self):
 		if not self.initCompleted:
 			return {'success': True, 'result': {'incidentType': 5, 'description': 'Параметр не инициализирован.', 'self': self}}
@@ -461,6 +461,7 @@ class parameterIncidents(resourceParameter):
 
 		return {'success': True, 'result': None}
 
+#+
 class parameterBalance(resourceParameter):
 	def __init__(self, id, date):
 		resourceParameter.__init__(self, id)
@@ -650,14 +651,14 @@ def structureIncidents(incidents):
 		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
 		emailsubst[_parent][_child].append(params)
 	return emailsubst
-
+#+
 def fillEmailTemplate(templatefile, subst):
 	if len(subst) > 0:
 		html = open(templatefile).read()
 		template = Template(html)
 		message = template.render(subst=subst)
 		return message
-
+#+
 def sendEmail(header, message):
 		recipients_emails = email_config['recipients_emails'].split(',')
 		msg = MIMEText(message, 'html', 'utf-8')

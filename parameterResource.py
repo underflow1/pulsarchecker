@@ -1,22 +1,18 @@
 from functions_db import db
 import functions_stuff as stuff
 from datetime import datetime, timedelta, date, time
-from config_functions import config
+from functions_config import config
 
-class parameterResource:
+class resource:
 	def __init__(self, param_id):
 		self.param_id = param_id
 		self.metadata = None
 		self.placeType = None
+		self.place_id = None
 		self.parameterType = None
-		self.initCompleted = False
-		self.edescription = ''
-		self.error = None
+		self.edescription = None
 		self.connectionActive = False
-		if self.initialize():
-			self.initCompleted = True
-		if not self.checkConnectionLost():
-			self.connectionActive = True
+		self.initCompleted = self.initialize()
 
 	def checkParameterExists(self):
 		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = $param_id '
@@ -55,7 +51,7 @@ class parameterResource:
 		args = {'param_id': self.param_id}
 		query = db.queryPrepare(query, args)
 		result = db.fetchAll(query)
-		if result and len(result) > 0:
+		if result:
 			coords = 'https://static-maps.yandex.ru/1.x/?ll=_coords_&l=map&size=450,350&pt=_coords_,flag&z=12'
 			if not result[12] == None:
 				placeCoord = coords.replace('_coords_', result[12])
@@ -76,9 +72,9 @@ class parameterResource:
 				'placeCoord': placeCoord,
 				'placeNameGroup': result[13]
 			}	
-			self.metadata = data			
-			return
-		raise Exception('Ошибка загрузки метаданных')
+			self.metadata = data
+		else:
+			raise Exception('Ошибка загрузки метаданных')
 
 	def defineParameterType(self):
 		if self.metadata['paramTypeId'] in (1,):
@@ -93,6 +89,22 @@ class parameterResource:
 	def definePlaceType(self):
 		if self.metadata['placeTypeId'] in (20,):
 			self.placeType = 1 # 1 = Куст (для баланса)
+			self.place_id = self.metadata['placeTypeId']
+
+	def setNewestArchiveTime(self):
+		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '
+		args = {'param_id': self.param_id}
+		query = db.queryPrepare(query, args)
+		result = db.fetchAll(query)
+		if result:
+			self.newestArchiveTime = result[0]
+		else:
+			raise Exception('Нет архивных данных')
+
+	def defineConnectionStatus(self): #1
+		if (datetime.now() - self.newestArchiveTime) < timedelta(hours = config.pollinterval * 2 + 1):
+			self.connectionActive = True
+		self.connectionActive = False
 
 	def initialize(self):
 		try:
@@ -100,27 +112,13 @@ class parameterResource:
 				self.setParameterMetadata()
 				self.defineParameterType()
 				self.definePlaceType()
+				self.setNewestArchiveTime()
+				self.defineConnectionStatus()
 		except Exception as e:
 			self.edescription = e
-			self.error = True
 			return False
 		else:
 			return True
 		
-	def getNewestArchiveTime(self):
-		if self.initCompleted:
-			query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '
-			args = {'param_id': self.param_id}
-			query = db.queryPrepare(query, args)
-			result = db.fetchAll(query)
-			if len(result) == 0:
-				raise Exception('Нет архивных данных')
-			else:
-				return result[0]
 
-	def checkConnectionLost(self): #1
-		if self.initCompleted:
-			newestArchiveTime = self.getNewestArchiveTime()
-			if (datetime.now() - newestArchiveTime) > timedelta(hours = pollinterval * 2 + 1)
-				return True
-			return False
+

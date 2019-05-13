@@ -1,5 +1,5 @@
 import psycopg2
-from functions_config import read_config
+from functions_config import config
 
 class dboperator:
 	def __init__(self):
@@ -7,7 +7,7 @@ class dboperator:
 		self.cursor = None
 
 	def connect(self):
-		db_config = read_config('database')
+		db_config = config.read_section('database')
 		self.connection =  psycopg2.connect(**db_config)
 		if self.connection:
 			self.cursor = self.connection.cursor()
