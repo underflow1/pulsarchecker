@@ -9,6 +9,7 @@ class parameterIncidents(resource):
 		resource.__init__(self, id)
 		self.balanceLackData = []
 		self.date = date
+		self.date_prev = date - timedelta(days = 1)
 		self.lastArchiveData = None
 
 	def getCurrenArchiveValue(self):
@@ -124,7 +125,6 @@ class parameterIncidents(resource):
 
 	def getBalanceAvailability(self):
 		lack_curr = self.getLackOfBalanceData(self.date)
-		self.date_prev = self.date - timedelta(days = 1)
 		lack_prev = self.getLackOfBalanceData(self.date_prev)
 		if lack_curr:
 			self.balanceLackData.append({'date': self.date, 'addresses': lack_curr})
@@ -150,3 +150,36 @@ class parameterIncidents(resource):
 			self.balanceMessage = stuff.fillTemplate(config.balanceNoticeTemplate, {'place': place, 'balance': balance} )
 			return self.balanceMessage	
 		return None
+
+	def getDailyStat(self):
+		stat = {}
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
+		args = {'date_s': self.date_prev, 'date_e': self.date}
+		result = db.fetchAll(query)
+		if result:
+			stats['active'] = result[0]	
+	
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > $date_s and created_at < $date_e '
+		query = db.queryPrepare(query, args)
+		result = db.fetchAll(query)
+		if result:
+			stats['created'] = result[0]	
+
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > $date_s and updated_at < $date_e '
+		query = db.queryPrepare(query, args)
+		result = db.fetchAll(query)
+		if result:
+			stats['autoclosed'] = result[0]			
+
+		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > $date_s and updated_at < $date_e '
+		query = db.queryPrepare(query, args)
+		result = db.fetchAll(query)
+		if result:
+			stats['closed'] = result[0]			
+
+		return stats
+
+	def getDailyMessage(self):
+		subst = self.getIncidentsStats()
+		dailyReportMessage = stuff.fillTemplate(dailyReportNoticeTemplate, subst)
+		return dailyReportMessage		

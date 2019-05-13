@@ -474,7 +474,7 @@ class parameterBalance(resourceParameter):
 		query = filedata.read()
 		arguments = {'date_s': self.date_s, 'date_e': self.date_e, 'place': self.place, 'type_a': 2}
 		self.query = prepareQuery(query, arguments)
-
+#+
 	def checkBalanceAvailability(self, date):
 		query = ' \
 		SELECT places."Name" \
@@ -500,14 +500,14 @@ class parameterBalance(resourceParameter):
 				return {'success': False, 'result': adresses}
 			return {'success': True}
 		return query
-		
+#+		
 	def getBalanceStats(self):
 		if self.query:
 			query = queryFetchOne(self.query)
 			if query['success']:
 				return {'success': True, 'result': query['result']}
 			return query
-
+#+
 	def getBalanceMessage(self):
 		a = self.getBalanceStats()
 		if a['success'] and a['result']:
@@ -524,7 +524,7 @@ class dailyReport():
 	def __init__(self, date):
 		self.date_s = date
 		self.date_e = date + timedelta(days = 1)
-
+#+
 	def getIncidentsStats(self):
 		stats = {}
 		args = {'date_s': self.date_s, 'date_e': self.date_e}
@@ -549,12 +549,12 @@ class dailyReport():
 			stats['Инцидентов закрытых вручную'] = query['result']
 
 		return stats
-
+#+
 	def getReportMessage(self):
 		subst = self.getIncidentsStats()
 		dailyReportMessage = fillEmailTemplate(dailyReportNoticeTemplate, subst)
 		return dailyReportMessage
-
+#+
 class incidentHandler:
 	def saveIncident(self, incident):
 		if len(incident) > 0:
@@ -638,7 +638,7 @@ class incidentHandler:
 		args = {'incident_id': incident_id, 'lastchecked_time': lastchecked_time}
 		query = prepareQuery(query, args)
 		query = queryUpdate(query)
-
+#+
 def structureIncidents(incidents):
 	emailsubst = {}
 	for incident in incidents:

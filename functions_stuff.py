@@ -55,30 +55,6 @@ def getParamCheckList():
 			params.append(item[0])
 		return params
 
-def updateIncidentRegister(param_id, date, regtype):
-	query = ' SELECT count(*) FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype= $regtype'
-	args = {'param_id': param_id, 'regtype': regtype}
-	query = db.queryPrepare(query, args)
-	result = db.fetchAll(query)
-	args = {'param_id': param_id, 'lastchecked_time': date, 'regtype': regtype}
-	if result[0] == 0 :
-		query = ' UPDATE "Tepl"."Alerts_register" SET lastchecked_time = $lastchecked_time WHERE param_id = $param_id and regtype= $regtype '
-	else:
-		query = ' INSERT INTO "Tepl"."Alerts_register"(param_id, lastchecked_time, regtype)  VALUES ($param_id, $lastchecked_time, $regtype) '
-	db.executeInsertUpdate(query)
-
-def getIncidentRegisterDate(param_id, regtype):
-	query = ' SELECT lastchecked_time FROM "Tepl"."Alerts_register" where param_id = $param_id and regtype = $regtype '
-	args = {'param_id': param_id, 'regtype': regtype}
-	query = db.queryPrepare(query, args)
-	result = db.fetchAll(query)
-	if result:
-		if len(result) == 1:
-			return result[0]
-		else:
-			raise Exception('Ошибка в регистре')
-	return False
-
 def fillTemplate(templatefile, subst):
 	if len(subst) > 0:
 		html = open(templatefile).read()
@@ -95,3 +71,16 @@ def sendEmail(header, message):
 	server = smtplib.SMTP(config.get('email', 'host'))
 	server.sendmail(msg['From'], recipients_emails, msg.as_string())
 	server.quit()		
+
+def structureIncidents(incidents):
+	emailsubst = {}
+	for incident in incidents:
+		_parent = incident['self'].metadata['parentPlaceTypeName'] + ' ' + incident['self'].metadata['parentPlaceName']
+		if _parent not in emailsubst:
+			emailsubst[_parent] = {}
+		_child = incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName']
+		if _child not in emailsubst[_parent]:
+			emailsubst[_parent][_child] = []
+		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
+		emailsubst[_parent][_child].append(params)
+	return emailsubst
