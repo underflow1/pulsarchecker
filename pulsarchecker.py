@@ -299,7 +299,7 @@ class parameterIncidents(resourceParameter):
 				return {'success': False, 'error': True, 'description': 'Последняя дата не определена'}
 			return query
 		return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#-
 	def getLastCheckedTime(self):
 		if self.initCompleted:
 			a = getIncidentRegisterDate(self.param_id, 'incident')
@@ -336,7 +336,7 @@ class parameterIncidents(resourceParameter):
 				return query
 			return {'success': False, 'error': a['error'], 'description': a['description'] }
 		return {'success': False, 'error': self.error, 'description': self.edescription}
-
+#+
 	def checkConnectionLost(self): #1
 		if self.dataLoaded:
 			if (datetime.now() - self.last['newestArchiveTime']) > timedelta(hours = pollhourinterval + pollhourdelta):

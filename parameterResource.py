@@ -1,20 +1,22 @@
 from functions_db import db
 import functions_stuff as stuff
 from datetime import datetime, timedelta, date, time
+from config_functions import config
 
-class resourceParameter:
+class parameterResource:
 	def __init__(self, param_id):
 		self.param_id = param_id
-		self.exist = False
 		self.metadata = None
 		self.placeType = None
 		self.parameterType = None
 		self.initCompleted = False
 		self.edescription = ''
 		self.error = None
-		#self.last = {}
+		self.connectionActive = False
 		if self.initialize():
 			self.initCompleted = True
+		if not self.checkConnectionLost():
+			self.connectionActive = True
 
 	def checkParameterExists(self):
 		query = ' SELECT prp_id FROM "Tepl"."ParamResPlc_cnt" WHERE prp_id = $param_id '
@@ -119,32 +121,6 @@ class resourceParameter:
 	def checkConnectionLost(self): #1
 		if self.initCompleted:
 			newestArchiveTime = self.getNewestArchiveTime()
-			lastCheckedTime = stuff.getIncidentRegisterDate(self.param_id, 'incident')
-			if (datetime.now() - newestArchiveTime )
-			if (datetime.now() - self.last['newestArchiveTime']) > timedelta(hours = pollhourinterval + pollhourdelta):
-				return {'success': True, 'result': True}
-			else:
-				return {'success': True, 'result': False}
-		else:
-			return {'success': False, 'error': self.error, 'description': self.edescription}
-	def getCurrenArchiveValue(self):
-		if self.initCompleted:
-			a = self.getLastCheckedTime()
-			if a['success'] and a['result']:
-				lastCheckedTime = a['result']
-				query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $lastCheckedTime '	
-				query = prepareQuery(query, {'param_id': self.param_id, 'lastCheckedTime': lastCheckedTime})			
-				query = queryFetchOne(query)
-				if query['success']:
-					if query['result']:
-						if self.parameterType == 1:
-							self.last['lastArchiveValue'] = round(query['result'][1],2)
-							return {'success': True, 'result': round(query['result'][1],2)}
-						if self.parameterType == 2: 
-							self.last['lastArchiveValue'] = round(query['result'][0],2)
-							return {'success': True, 'result': round(query['result'][0],2)}
-						return {'success': False, 'error': True, 'description': 'Этот тип параметра не учитывается'}
-					return {'success': False, 'error': True, 'description': 'Последнее значение не определено'}
-				return query
-			return {'success': False, 'error': a['error'], 'description': a['description'] }
-		return {'success': False, 'error': self.error, 'description': self.edescription}
+			if (datetime.now() - newestArchiveTime) > timedelta(hours = pollinterval * 2 + 1)
+				return True
+			return False
