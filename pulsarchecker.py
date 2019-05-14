@@ -700,7 +700,7 @@ if len(sys.argv) == 1:
 		activeLostIncidentTime = False
 
 		# Проверка наличия активного инцидента connection lost
-		a = iHandler.getExistingIncident(param_id, 1)
+		connectionLostIncidentsList = handler.getExistingIncident(param_id, 1)
 		if a['success']:
 			if a['result']:
 				activeLostIncident = a['result']

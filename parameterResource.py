@@ -3,7 +3,7 @@ import functions_stuff as stuff
 from datetime import datetime, timedelta, date, time
 from functions_config import config
 
-class resource:
+class parameterResource:
 	def __init__(self, param_id):
 		self.param_id = param_id
 		self.metadata = None
@@ -12,6 +12,7 @@ class resource:
 		self.parameterType = None
 		self.edescription = None
 		self.connectionActive = False
+		self.newestArchiveTime = None
 		self.initCompleted = self.initialize()
 
 	def checkParameterExists(self):
