@@ -22,27 +22,31 @@ def getHourAverageDateRange(lastDate):
 
 def getDatesByHour(date_s, date_e):
 	hour = timedelta(hours = 1)
-	if date_e - date_s < hour:
-		raise Exception('Временной интервал меньше 1 часа')
-	else:
-		interval = []
-		date = date_s
-		while date <= date_e:
-			interval.append(date)
-			date = date + hour
-		return interval
-
+	if not(date_s == date_e):
+		if date_e - date_s < hour:
+			raise Exception('Временной интервал меньше 1 часа')
+		else:
+			interval = []
+			date = date_s
+			while date <= date_e:
+				interval.append(date)
+				date = date + hour
+			return interval
+	return [date_s]
+	
 def getDatesByDays(date_s, date_e):
 	day = timedelta(days = 1)
-	if date_e - date_s < day:
-		raise Exception('Временной интервал меньше 1 дня')
-	else:
-		interval = []
-		date = date_s
-		while date <= date_e:
-			interval.append(date)
-			date = date + day
-		return interval
+	if not(date_s == date_e):
+		if date_e - date_s < day:
+			raise Exception('Временной интервал меньше 1 дня')
+		else:
+			interval = []
+			date = date_s
+			while date <= date_e:
+				interval.append(date)
+				date = date + day
+			return interval
+	return [date_s]
 
 def getParamCheckList():
 	query = ' SELECT prp_id FROM "Tepl"."Task_cnt" WHERE tsk_typ = 2 AND "Aktiv_tsk" =  True '
@@ -84,3 +88,32 @@ def structureIncidents(incidents):
 		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
 		emailsubst[_parent][_child].append(params)
 	return emailsubst
+
+def getDailyMessage(date):
+	stats = {}
+	query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
+	args = {'date': date}
+	result = db.fetchAll(query)
+	if result:
+		stats['active'] = result[0]	
+
+	query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE date(created_at) = $date '
+	query = db.queryPrepare(query, args)
+	result = db.fetchAll(query)
+	if result:
+		stats['created'] = result[0]	
+
+	query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and date(updated_at) = $date '
+	query = db.queryPrepare(query, args)
+	result = db.fetchAll(query)
+	if result:
+		stats['autoclosed'] = result[0]			
+
+	query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and date(updated_at) = $date '
+	query = db.queryPrepare(query, args)
+	result = db.fetchAll(query)
+	if result:
+		stats['closed'] = result[0]			
+
+	dailyReportMessage = fillTemplate(config.dailyReportNoticeTemplate, stats)
+	return dailyReportMessage	

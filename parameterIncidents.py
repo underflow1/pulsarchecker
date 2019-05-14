@@ -1,16 +1,21 @@
 from functions_db import db
-from parameterResource import resource
+from parameterResource import parameterResource
 from datetime import datetime, timedelta, date, time
 import functions_stuff as stuff
 from functions_config import config
 
-class parameterIncidents(resource):
-	def __init__(self, id, date):
-		resource.__init__(self, id)
+class parameterIncidents(parameterResource):
+	def __init__(self, id):
+		parameterResource.__init__(self, id)
 		self.balanceLackData = []
+		self.date = None
+		self.date_prev = None
+		self.lastArchiveData = None
+	
+	def setDate(self, date):
 		self.date = date
 		self.date_prev = date - timedelta(days = 1)
-		self.lastArchiveData = None
+		self.getCurrenArchiveValue()
 
 	def getCurrenArchiveValue(self):
 		query = ' SELECT "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 AND "DateValue" = $date '	
@@ -55,7 +60,7 @@ class parameterIncidents(resource):
 			timerange = stuff.getWeekAverageDateRange(self.date)
 			averageValue = self.getAverageValue(timerange)
 			currentValue = self.getCurrenArchiveValue()
-			if currentValue > 0.5 and (currentValue * 2) > averageValue:
+			if currentValue > 0.5 and currentValue > (averageValue * 2):
 				return True
 		return False
 
@@ -90,10 +95,10 @@ class parameterIncidents(resource):
 							if self.checkConsumptionStale():
 								return {'incidentType': 3, 'description': 'Зафиксировано отсутствие расхода.', 'self': self}
 					if self.parameterType == 2: # 2 - value (pressure)
-						if self.checkValueDown:
+						if self.checkValueDown():
 							return {'incidentType': 4, 'description': 'Зафиксировано падение значения параметра.', 'self': self}
 				except Exception as e:
-					return {'incidentType': 5, 'description': 'Параметр не инициализирован. Описание: ' + e, 'self': self}	
+					return {'incidentType': 5, 'description': 'Параметр не инициализирован. Описание: ' + str(e), 'self': self}	
 				else: 
 					return False
 
@@ -151,35 +156,3 @@ class parameterIncidents(resource):
 			return self.balanceMessage	
 		return None
 
-	def getDailyStat(self):
-		stat = {}
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'active\' '
-		args = {'date_s': self.date_prev, 'date_e': self.date}
-		result = db.fetchAll(query)
-		if result:
-			stats['active'] = result[0]	
-	
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE created_at > $date_s and created_at < $date_e '
-		query = db.queryPrepare(query, args)
-		result = db.fetchAll(query)
-		if result:
-			stats['created'] = result[0]	
-
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'autoclosed\' and updated_at > $date_s and updated_at < $date_e '
-		query = db.queryPrepare(query, args)
-		result = db.fetchAll(query)
-		if result:
-			stats['autoclosed'] = result[0]			
-
-		query = ' SELECT COUNT(id) FROM "Tepl"."Alert_cnt" WHERE status = \'closed\' and updated_at > $date_s and updated_at < $date_e '
-		query = db.queryPrepare(query, args)
-		result = db.fetchAll(query)
-		if result:
-			stats['closed'] = result[0]			
-
-		return stats
-
-	def getDailyMessage(self):
-		subst = self.getIncidentsStats()
-		dailyReportMessage = stuff.fillTemplate(dailyReportNoticeTemplate, subst)
-		return dailyReportMessage		

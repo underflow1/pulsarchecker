@@ -31,8 +31,12 @@ class dboperator:
 
 	def fetchAll(self, query):
 		self.cursor.execute(query)
-		query = self.cursor.fetchall()
-		return query
+		result = self.cursor.fetchall()
+		if result:
+			if len(result) == 1:
+				return result[0]
+			return result
+		return False
 
 	def executeInsertUpdate(self, query):
 		self.cursor.execute(query)

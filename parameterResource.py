@@ -20,7 +20,7 @@ class parameterResource:
 		args = {'param_id': self.param_id}
 		query = db.queryPrepare(query, args)
 		result = db.fetchAll(query)
-		if result and result[0] == self.param_id:
+		if result:
 			return True
 		return False
 
@@ -105,6 +105,7 @@ class parameterResource:
 	def defineConnectionStatus(self): #1
 		if (datetime.now() - self.newestArchiveTime) < timedelta(hours = config.pollinterval * 2 + 1):
 			self.connectionActive = True
+			return
 		self.connectionActive = False
 
 	def initialize(self):
