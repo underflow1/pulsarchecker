@@ -3,6 +3,7 @@ from handlerIncidents import incidentHandler
 from datetime import datetime, timedelta
 import functions_stuff as stuff
 import os, sys, time
+from functions_config import config
 
 autoclosedIncidentCounter = 0
 createdIncidents = []
@@ -13,7 +14,6 @@ if len(sys.argv) == 1:
 		iHandler = incidentHandler()
 		pIncident = parameterIncidents(param_id)
 		print('Параметр:', param_id, pIncident.metadata['parentPlaceName'], pIncident.metadata['placeName'])
-		time.sleep(0.1)
 		activeLostIncident = False
 		activeOtherIncident = False
 		activeOtherIncidentTime = False
@@ -37,7 +37,6 @@ if len(sys.argv) == 1:
 				continue
 		else: # если связь не потеряна
 			print('Прибор на связи.', end = ' \b ')
-			time.sleep(0.1)
 			if connectionLostIncident: # а инцидент есть, то его надо закрыть: 
 				print('Есть активный инцидент не выход на связь. Закрыть')
 				iHandler.closeIncident(connectionLostIncident, 1)
@@ -47,14 +46,15 @@ if len(sys.argv) == 1:
 		# далее мы строим интервал пропущенных проверок для данного параметра 
 		newestDate = pIncident.newestArchiveTime
 		lastCheckDate = iHandler.getIncidentRegisterDate(param_id, 'incident')
-		if not lastCheckDate:
-#			lastCheckDate = newestDate
-#		if (newestDate == lastCheckDate):
+		if lastCheckDate == newestDate:
 			print('Пропущеных точек нет.')
 			iHandler.updateIncidentRegisterDate(param_id, newestDate, 'incident')
 		else:
-			dates = stuff.getDatesByHour(lastCheckDate, newestDate)
-			print('Пропущено:', len(dates), 'точек.')
+			if not lastCheckDate:
+				dates = [newestDate]
+			else:
+				dates = stuff.getDatesByHour(lastCheckDate, newestDate)
+			print('Количество пропущеных точек:', len(dates))
 			# и начинаем проверять каждую дату на наличие инцидента (кроме потеря связи)
 			for date in dates:
 				pIncident.setDate(date) # устанавливаем дату
@@ -63,46 +63,46 @@ if len(sys.argv) == 1:
 				if not currentIncident: # если в эту дату инцидента нет
 					print(str(date), end = ' \b ')
 					if not openedNotCompletedIncidentList: # а так же нет никаких открытых незавершенных инцидентов, то смотрим следущую дату
-						print('Инцидентов нет')
+						print('Инцидентов нет', end = ' \r ')
 						continue
 					else: # если есть открытые не завершенные инциденты, то их надо все завершить (is_completed)
-						print('Обнаружены открытые незавершенные инциденты. Завершить.', end = ' \b ')
-						time.sleep(0.1)
+						print('Обнаружены открытые незавершенные инциденты. Завершить', end = ' \b ')
 						for id in openedNotCompletedIncidentList:
 							iHandler.updateExistingIncidentIsCompleted(id)
-						print('Завершены.')
-						time.sleep(1)
+						stuff.printdots()
+						print(' Завершены.')
+						time.sleep(0.3)
 				else: # если все-таки в эту дату нашелся инцидент
 					print(str(date), 'Обнаружен инцидент тип', currentIncident['incidentType'], end = ' \b ')
-					time.sleep(0.1)
 					# проверяем наличие такого же незавершенного инцидента
 					openedNotCompletedIncidentId = iHandler.getExistingNotCompletedIncident(param_id, currentIncident['incidentType'])
 					if not openedNotCompletedIncidentId: # если незавершенного инцидента нет, то создаём инцидент
-						print('Инцидент новый - cоздать.', end = ' \b ')
-						time.sleep(0.1)
+						print('Инцидент новый - cоздать', end = ' \b ')
 						iHandler.createIncident(currentIncident)
 						createdIncidents.append(currentIncident)
-						print('Создано')
-						time.sleep(1)
+						stuff.printdots()
+						print(' Создано')
+						time.sleep(0.3)
 					else: # а если есть не завершенный открытый инцидент такого же типа, то это он и есть (т.е. инцидент продолжается) и мы смотрим следущую дату
 						print('- продолжение старого инцидента', end = ' \r ')
 						continue
 			iHandler.updateIncidentRegisterDate(param_id, date, 'incident')
+			print()
 
 	print('Новых инцидентов:', len(createdIncidents))
 	print('Автоматически закрытых инцидентов:', autoclosedIncidentCounter)
 	# отправка писем
-	if savedincidents:
-		emailsubst = structureIncidents(savedincidents)
+	if createdIncidents:
+		emailsubst = stuff.structureIncidents(createdIncidents)
 		if emailsubst:
-			message = stuff.fillTemplate(incidentsNoticeTemplate, emailsubst)
+			message = stuff.fillTemplate(config.incidentsNoticeTemplate, emailsubst)
 			if message:
 				header = 'Новый инцидент.'
 				stuff.sendEmail(header, message)
 
 else:# ежедневный отчет + проверка баланса
 	if len(sys.argv) ==2 and sys.argv[1] == 'balance':
-		parametersList = getParamCheckList()
+		parametersList = stuff.getParamCheckList()
 		bushes = []
 		for param_id in parametersList:
 			pIncident = parameterIncidents(param_id)
@@ -112,7 +112,7 @@ else:# ежедневный отчет + проверка баланса
 		balanceMessage = ''
 		
 		for param_id in bushes:
-			iHandler = incidentHandler
+			iHandler = incidentHandler()
 			pBush = parameterIncidents(param_id)
 			balanceDate = date.today() - timedelta(days = 1)
 			balanceLastCheckDate = iHandler.getIncidentRegisterDate(param_id, 'balance')

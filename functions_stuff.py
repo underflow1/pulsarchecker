@@ -1,10 +1,10 @@
-from datetime import datetime, timedelta, date, time
+from datetime import datetime, timedelta, date
 from functions_db import db
 from functions_config import config
 from jinja2 import Template
 from email.mime.text import MIMEText
 from email.header import Header
-import smtplib
+import smtplib, time
 
 # return: list ([0] - начало, [1] - конец)
 def getWeekAverageDateRange(lastDate):
@@ -85,7 +85,7 @@ def structureIncidents(incidents):
 		_child = incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName']
 		if _child not in emailsubst[_parent]:
 			emailsubst[_parent][_child] = []
-		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
+		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + str(incident['self'].edescription))
 		emailsubst[_parent][_child].append(params)
 	return emailsubst
 
@@ -117,3 +117,12 @@ def getDailyMessage(date):
 
 	dailyReportMessage = fillTemplate(config.dailyReportNoticeTemplate, stats)
 	return dailyReportMessage	
+
+def printdots():
+	print('\b.', end=' \b')
+	time.sleep(0.3)
+	print('.', end=' \b')
+	time.sleep(0.3)
+	print('.', end=' \b')
+	time.sleep(0.3)
+
