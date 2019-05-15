@@ -11,6 +11,7 @@ class configParserWrapper(ConfigParser):
 		self.balanceQueryFile = folder + dirsep + 'balance.sql'
 		self.incidentsNoticeTemplate = folder +'email.html'
 		self.balanceNoticeTemplate = folder +'balance.html'
+		self.balanceLackTemplate = folder + 'balancelack.html'
 		self.dailyReportNoticeTemplate = folder +'dailyreport.html'
 		self.averagedays = 7
 		self.averagehours = 2

@@ -109,24 +109,41 @@ else:# ежедневный отчет + проверка баланса
 			if pIncident.parameterType == 1 and pIncident.placeType == 1:
 				bushes.append(param_id)
 
+		balanceMessage = ''
+		
 		for param_id in bushes:
 			iHandler = incidentHandler
 			pBush = parameterIncidents(param_id)
 			balanceDate = date.today() - timedelta(days = 1)
 			balanceLastCheckDate = iHandler.getIncidentRegisterDate(param_id, 'balance')
-			if not balanceLastCheckDate:
+			if balanceDate == balanceLastCheckDate:
 				print('Пропущеных балансов нет.')
 				iHandler.updateIncidentRegisterDate(param_id, balanceDate, 'balance')
 			else:
-				dates = stuff.getDatesByDays(balanceLastCheckDate, balanceDate)
-				print('Пропущено:', len(dates), 'точек.')
+				if not balanceLastCheckDate:
+					dates = [balanceDate]
+				else:
+					dates = stuff.getDatesByDays(balanceLastCheckDate, balanceDate)
+				print('По адресу:', pBush.metadata['parentPlaceName'], pBush.metadata['placeName'], 'пропущено', len(dates), 'точек.')
 				# и начинаем проверять баланс на каждую из пропущенных дат
 				balancePart = ''
 				for date in dates:
-					print('По адресу:', pBush.metadata['parentPlaceName'], pBush.metadata['placeName'], 'пропущено', len(dates), 'точек.')
 					pBush.setDate(date)
 					balanceAvailable = pBush.getBalanceAvailability()
 					if not balanceAvailable:
-						pass
+						balancePart = balancePart + pBush.getBalanceLackMessage()
 					else:
-						balancePart = balancePart + pBush.getBalanceMessage()
+						bp = pBush.getBalanceMessage()
+						if bp:
+							balancePart = balancePart + pBush.getBalanceMessage()
+							iHandler.createIncident({'incidentType': 6, 'description': 'Небаланс.', 'self': pBush})
+			balanceMessage = balanceMessage + balancePart
+		
+		reportDate = date.today() - timedelta(days = 1)
+		dailyMessage = stuff.getDailyMessage(reportDate)
+		if len(balanceMessage) == 0:
+			balanceMessage = '<span>Отклонений по балансу за прошедший день не обнаружено.</span>'
+		footer = '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
+		message = dailyMessage + balanceMessage + footer
+		header = 'Ежедневная сводка мониторинга за ' + str(reportDate)
+		stuff.sendEmail(header, message)		
