@@ -6,6 +6,7 @@ import os, sys, time
 from functions_config import config
 
 autoclosedIncidentCounter = 0
+is_completedCounter = 0
 createdIncidents = []
 
 if len(sys.argv) == 1:
@@ -69,9 +70,10 @@ if len(sys.argv) == 1:
 						print('Обнаружены открытые незавершенные инциденты. Завершить', end = ' \b ')
 						for id in openedNotCompletedIncidentList:
 							iHandler.updateExistingIncidentIsCompleted(id)
+							is_completedCounter += 1
 						stuff.printdots()
-						print(' Завершены.')
-						time.sleep(0.3)
+						print(' Завершено.')
+						time.sleep(0.5)
 				else: # если все-таки в эту дату нашелся инцидент
 					print(str(date), 'Обнаружен инцидент тип', currentIncident['incidentType'], end = ' \b ')
 					# проверяем наличие такого же незавершенного инцидента
@@ -81,8 +83,8 @@ if len(sys.argv) == 1:
 						iHandler.createIncident(currentIncident)
 						createdIncidents.append(currentIncident)
 						stuff.printdots()
-						print(' Создано')
-						time.sleep(0.3)
+						print(' Создано.')
+						time.sleep(0.5)
 					else: # а если есть не завершенный открытый инцидент такого же типа, то это он и есть (т.е. инцидент продолжается) и мы смотрим следущую дату
 						print('- продолжение старого инцидента', end = ' \r ')
 						continue
@@ -90,6 +92,7 @@ if len(sys.argv) == 1:
 			print()
 
 	print('Новых инцидентов:', len(createdIncidents))
+	print('Завершенных инцидентов:', is_completedCounter)
 	print('Автоматически закрытых инцидентов:', autoclosedIncidentCounter)
 	# отправка писем
 	if createdIncidents:

@@ -133,9 +133,9 @@ class parameterIncidents(parameterResource):
 		lack_prev = self.getLackOfBalanceData(self.date_prev)
 		place = self.metadata['placeTypeName'] + ' ' + self.metadata['placeName']
 		if lack_curr:
-			self.balanceLackData.append({'place': place, 'date': self.date, 'addresses': lack_curr})
+			self.balanceLackData.append({'date': self.date, 'addresses': lack_curr})
 		if lack_prev:
-			self.balanceLackData.append({'place': place, 'date': self.date_prev, 'addresses': lack_prev})
+			self.balanceLackData.append({'date': self.date_prev, 'addresses': lack_prev})
 		if len(self.balanceLackData) == 0:
 			return True
 		return False
