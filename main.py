@@ -28,22 +28,21 @@ if len(sys.argv) == 1:
 		if connectionLost: # если связь потеряна
 			print('Связь потеряна')
 			if not connectionLostIncident:  # а инцидента нет, то создать инцидент и смотрим следующий
-				print('Активного инцидента не выход на связь нет. Создать.')
+				print('Активного инцидента не выход на связь нет. Создать.', end = ' \b ')
 				currentIncident = pIncident.getCurrentIncident()
 				iHandler.createIncident(currentIncident)
 				createdIncidents.append(currentIncident)
-				print('Инцидент не выход на связь создан.')
+				stuff.printdots()
 				continue 
 			else:  # и инцидент уже есть, то пропускаем этот параметр и смотрим следующий
 				continue
 		else: # если связь не потеряна
 			print('Прибор на связи.', end = ' \b ')
 			if connectionLostIncident: # а инцидент есть, то его надо закрыть: 
-				print('Есть активный инцидент не выход на связь. Закрыть')
+				print('Есть активный инцидент не выход на связь. Закрыть', end = ' \b ')
 				iHandler.closeIncident(connectionLostIncident, 1)
 				autoclosedIncidentCounter += 1
-				print('Инцидент не выход на связь закрыт.')
-
+				stuff.printdots()
 		# далее мы строим интервал пропущенных проверок для данного параметра 
 		newestDate = pIncident.newestArchiveTime
 		lastCheckDate = iHandler.getIncidentRegisterDate(param_id, 'incident')
@@ -72,8 +71,6 @@ if len(sys.argv) == 1:
 							iHandler.updateExistingIncidentIsCompleted(id)
 							is_completedCounter += 1
 						stuff.printdots()
-						print(' Завершено.')
-						time.sleep(0.5)
 				else: # если все-таки в эту дату нашелся инцидент
 					print(str(date), 'Обнаружен инцидент тип', currentIncident['incidentType'], end = ' \b ')
 					# проверяем наличие такого же незавершенного инцидента
@@ -83,8 +80,6 @@ if len(sys.argv) == 1:
 						iHandler.createIncident(currentIncident)
 						createdIncidents.append(currentIncident)
 						stuff.printdots()
-						print(' Создано.')
-						time.sleep(0.5)
 					else: # а если есть не завершенный открытый инцидент такого же типа, то это он и есть (т.е. инцидент продолжается) и мы смотрим следущую дату
 						print('- продолжение старого инцидента', end = ' \r ')
 						continue

@@ -131,7 +131,7 @@ class parameterIncidents(parameterResource):
 	def getBalanceAvailability(self):
 		lack_curr = self.getLackOfBalanceData(self.date)
 		lack_prev = self.getLackOfBalanceData(self.date_prev)
-		place = self.metadata['placeTypeName'] + ' ' + self.metadata['placeName']
+		self.balanceLackData = []
 		if lack_curr:
 			self.balanceLackData.append({'date': self.date, 'addresses': lack_curr})
 		if lack_prev:
@@ -141,7 +141,7 @@ class parameterIncidents(parameterResource):
 		return False
 		
 	def getBalanceLackMessage(self):
-		result = stuff.fillTemplate(config.balanceLackTemplate, self.balanceLackData)
+		return stuff.fillTemplate(config.balanceLackTemplate, self.balanceLackData)
 
 	def getBalanceMessage(self):
 		file = open(config.balanceQueryFile,'r')

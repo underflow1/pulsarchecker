@@ -85,7 +85,7 @@ def structureIncidents(incidents):
 		_child = incident['self'].metadata['placeTypeName'] + ' ' + incident['self'].metadata['placeName']
 		if _child not in emailsubst[_parent]:
 			emailsubst[_parent][_child] = []
-		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + str(incident['self'].edescription))
+		params = (incident['self'].metadata['paramName'], incident['description'] + ' ' + incident['self'].edescription)
 		emailsubst[_parent][_child].append(params)
 	return emailsubst
 
@@ -122,7 +122,9 @@ def printdots():
 	print('\b.', end=' \b')
 	time.sleep(0.3)
 	print('.', end=' \b')
-	time.sleep(0.3)
+	time.sleep(0.2)
 	print('.', end=' \b')
+	time.sleep(0.1)
+	print(' ОК.')
 	time.sleep(0.3)
 

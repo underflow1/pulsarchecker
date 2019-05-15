@@ -10,7 +10,7 @@ class parameterResource:
 		self.placeType = None
 		self.place_id = None
 		self.parameterType = None
-		self.edescription = None
+		self.edescription = ''
 		self.connectionActive = False
 		self.newestArchiveTime = None
 		self.initCompleted = self.initialize()
