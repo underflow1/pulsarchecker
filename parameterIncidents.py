@@ -3,6 +3,7 @@ from parameterResource import parameterResource
 from datetime import datetime, timedelta, date, time
 import functions_stuff as stuff
 from functions_config import config
+from handlerIncidents import incidentHandler
 
 class parameterIncidents(parameterResource):
 	def __init__(self, id):
@@ -120,7 +121,7 @@ class parameterIncidents(parameterResource):
 			args = {'place_id': self.place_id, 'date': date}
 			query = db.queryPrepare(query, args)
 			result = db.fetchAll(query)
-			if result:
+			if not result:
 				return False
 			else:
 				adresses  = []
@@ -133,9 +134,11 @@ class parameterIncidents(parameterResource):
 		lack_prev = self.getLackOfBalanceData(self.date_prev)
 		self.balanceLackData = []
 		if lack_curr:
-			self.balanceLackData.append({'date': self.date, 'addresses': lack_curr})
+			for address in lack_curr:
+				self.balanceLackData.append(address)
 		if lack_prev:
-			self.balanceLackData.append({'date': self.date_prev, 'addresses': lack_prev})
+			for address in lack_prev:
+				self.balanceLackData.append(address)
 		if len(self.balanceLackData) == 0:
 			return True
 		return False
@@ -144,19 +147,23 @@ class parameterIncidents(parameterResource):
 		return stuff.fillTemplate(config.balanceLackTemplate, self.balanceLackData)
 
 	def getBalanceMessage(self):
-		file = open(config.balanceQueryFile,'r')
-		query = file.read()
-		arguments = {'date_s': self.date_prev, 'date_e': self.date, 'place': self.place_id, 'type_a': 2}
-		query = db.queryPrepare(query, arguments)
-		result = db.fetchAll(query)
-		balance = []
-		if result:
-			for item in result:
-				if type(item).__name__ == 'float':
-					item = round(item, 1)
-				balance.append(item)
-			place = self.metadata['placeTypeName'] + ' ' + self.metadata['placeName']
-			self.balanceMessage = stuff.fillTemplate(config.balanceNoticeTemplate, {'place': place, 'balance': balance} )
-			return self.balanceMessage	
-		return None
+		if self.getBalanceAvailability():
+			iHandler = incidentHandler()
+			iHandler.updateIncidentRegisterDate(self.param_id, self.date, 'balance')
+			file = open(config.balanceQueryFile,'r')
+			query = file.read()
+			arguments = {'date_s': self.date_prev, 'date_e': self.date, 'place': self.place_id, 'type_a': 2}
+			query = db.queryPrepare(query, arguments)
+			result = db.fetchAll(query)
+			balance = []
+			if result:
+				for item in result:
+					if type(item).__name__ == 'float':
+						item = round(item, 1)
+					balance.append(item)
+					#iHandler.createIncident({'incidentType': 6, 'description': 'Небаланс.', 'self': {}})
+				return stuff.fillTemplate(config.balanceNoticeTemplate, {'balance': balance})
+			return False
+		else:
+			return stuff.fillTemplate(config.balanceLackTemplate, self.balanceLackData)
 

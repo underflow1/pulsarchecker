@@ -90,7 +90,7 @@ class parameterResource:
 	def definePlaceType(self):
 		if self.metadata['placeTypeId'] in (20,):
 			self.placeType = 1 # 1 = Куст (для баланса)
-			self.place_id = self.metadata['placeTypeId']
+			self.place_id = self.metadata['placeId']
 
 	def setNewestArchiveTime(self):
 		query = ' SELECT MAX("DateValue") FROM "Tepl"."Arhiv_cnt" WHERE pr_id = $param_id AND typ_arh = 1 '

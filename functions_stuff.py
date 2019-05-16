@@ -118,6 +118,9 @@ def getDailyMessage(date):
 	dailyReportMessage = fillTemplate(config.dailyReportNoticeTemplate, stats)
 	return dailyReportMessage	
 
+def returnFooter():
+	return '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
+
 def printdots():
 	print('\b.', end=' \b')
 	time.sleep(0.3)

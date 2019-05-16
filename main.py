@@ -1,6 +1,6 @@
 from parameterIncidents import parameterIncidents
 from handlerIncidents import incidentHandler
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date
 import functions_stuff as stuff
 import os, sys, time
 from functions_config import config
@@ -85,7 +85,7 @@ if len(sys.argv) == 1:
 						continue
 			iHandler.updateIncidentRegisterDate(param_id, date, 'incident')
 			print()
-
+	print()
 	print('Новых инцидентов:', len(createdIncidents))
 	print('Завершенных инцидентов:', is_completedCounter)
 	print('Автоматически закрытых инцидентов:', autoclosedIncidentCounter)
@@ -95,11 +95,12 @@ if len(sys.argv) == 1:
 		if emailsubst:
 			message = stuff.fillTemplate(config.incidentsNoticeTemplate, emailsubst)
 			if message:
+				message = message + stuff.returnFooter()
 				header = 'Новый инцидент.'
 				stuff.sendEmail(header, message)
 
 else:# ежедневный отчет + проверка баланса
-	if len(sys.argv) ==2 and sys.argv[1] == 'balance':
+	if len(sys.argv) == 2 and sys.argv[1] == 'balance':
 		parametersList = stuff.getParamCheckList()
 		bushes = []
 		for param_id in parametersList:
@@ -112,36 +113,33 @@ else:# ежедневный отчет + проверка баланса
 		for param_id in bushes:
 			iHandler = incidentHandler()
 			pBush = parameterIncidents(param_id)
-			balanceDate = date.today() - timedelta(days = 1)
+			balanceDate = datetime.combine(date.today(), datetime.min.time()) - timedelta(days = 1)
 			balanceLastCheckDate = iHandler.getIncidentRegisterDate(param_id, 'balance')
+			bbdate = None
+			print('placeid:', pBush.metadata['placeId'], pBush.metadata['placeTypeName'], pBush.metadata['placeName'], end = ' \b')
 			if balanceDate == balanceLastCheckDate:
-				print('Пропущеных балансов нет.')
-				iHandler.updateIncidentRegisterDate(param_id, balanceDate, 'balance')
+				print(' Пропущеных балансов нет.')
 			else:
 				if not balanceLastCheckDate:
 					dates = [balanceDate]
 				else:
 					dates = stuff.getDatesByDays(balanceLastCheckDate, balanceDate)
-				print('По адресу:', pBush.metadata['parentPlaceName'], pBush.metadata['placeName'], 'пропущено', len(dates), 'точек.')
+				print(' пропущено дней баланса:', len(dates))
 				# и начинаем проверять баланс на каждую из пропущенных дат
 				balancePart = ''
-				for date in dates:
-					pBush.setDate(date)
-					balanceAvailable = pBush.getBalanceAvailability()
-					if not balanceAvailable:
-						balancePart = balancePart + pBush.getBalanceLackMessage()
-					else:
-						bp = pBush.getBalanceMessage()
-						if bp:
-							balancePart = balancePart + pBush.getBalanceMessage()
-							iHandler.createIncident({'incidentType': 6, 'description': 'Небаланс.', 'self': pBush})
-			balanceMessage = balanceMessage + balancePart
+				for bdate in dates:
+					pBush.setDate(bdate)
+					bp = pBush.getBalanceMessage()
+					if bp:
+						balancePart = balancePart + bp
+
+				if balancePart:
+					balanceMessage = balanceMessage + '<strong><h5>' + pBush.metadata['parentPlaceName'] + ' ' + pBush.metadata['placeName'] + '</h5></strong>' + balancePart
 		
 		reportDate = date.today() - timedelta(days = 1)
 		dailyMessage = stuff.getDailyMessage(reportDate)
 		if len(balanceMessage) == 0:
-			balanceMessage = '<span>Отклонений по балансу за прошедший день не обнаружено.</span>'
-		footer = '<br><br><a href="http://pulsarweb.rsks.su:8080">Система мониторинга пульсар</a>'
-		message = dailyMessage + balanceMessage + footer
+			balanceMessage = '<span>Отклонений по балансу не обнаружено.</span>'
+		message = dailyMessage + balanceMessage + stuff.returnFooter()
 		header = 'Ежедневная сводка мониторинга за ' + str(reportDate)
 		stuff.sendEmail(header, message)		

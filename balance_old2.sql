@@ -21,16 +21,13 @@
 		typ_arh integer,
 		pr_id integer,
 		"DateValue" timestamp without time zone,
-		tp_dat integer,
-		"Delta" double precision
+		tp_dat integer
 		);
 
 	CREATE TEMPORARY TABLE date_range_tmp
 		(
-		"DateValue" timestamp without time zone,
-		"DateValueStrict" timestamp without time zone
+		"DateValue" timestamp without time zone
 		);
-
 
 	INSERT INTO date_range_tmp("DateValue")
 		SELECT CASE
@@ -42,12 +39,9 @@
 			"Tepl"."GetDateRange"($date_s, $date_e, '1 month')
 			END;
 
-	UPDATE date_range_tmp
-		SET "DateValueStrict" = "DateValue" - interval '1 second';
-
 -- подгружаем архивные данные для всех приборов:
-INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue", "Delta")
-	SELECT DISTINCT ON (pr_id, typ_arh, "DateValue") pr_id, typ_arh, "DateValue", "DataValue", "Delta" FROM "Tepl"."Arhiv_cnt"
+INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue")
+	SELECT DISTINCT ON (pr_id, typ_arh, "DateValue") pr_id, typ_arh, "DateValue", "DataValue" FROM "Tepl"."Arhiv_cnt"
 	WHERE
 	pr_id IN
 	(
@@ -58,11 +52,11 @@ INSERT INTO arhiv_tmp(pr_id, typ_arh, "DateValue", "DataValue", "Delta")
 -- указываем смещение начальной даты, для того чтобы в отчете не было пустой первой строки:
 		AND CASE
 			WHEN $type_a = 1 THEN 
-				"DateValue" BETWEEN timestamp $date_s + interval '1 hour'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s - interval '1 hour'  AND timestamp $date_e
 			WHEN $type_a = 2 THEN 
-				"DateValue" BETWEEN timestamp $date_s + interval '1 day'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s - interval '1 day'  AND timestamp $date_e
 			WHEN $type_a = 3 THEN 
-				"DateValue" BETWEEN timestamp $date_s + interval '1 month'  AND timestamp $date_e
+				"DateValue" BETWEEN timestamp $date_s - interval '1 month'  AND timestamp $date_e
 			END
 	);
 
@@ -73,20 +67,33 @@ SELECT
 	FROM
 	(
 	SELECT
-	dts."DateValueStrict" as "F0", -- выбираем даты из таблицы-столбца дат
-	CAST(SUM(a1."Delta") as double precision) as "F2" 
-	--CAST(SUM(1) as double precision) as "F2" 
-	--CAST(SUM(a1."DataValue" - a_prev1."DataValue") as double precision) as "F2"
+	dts.date as "F0", -- выбираем даты из таблицы-столбца дат
+	CAST(SUM(a1."DataValue" - a_prev1."DataValue") as double precision) as "F2"
 
 	FROM "Tepl"."Places_cnt" p
 	INNER JOIN "Tepl"."PlaceTyp_cnt" pt ON p.typ_id = pt.typ_id
-	INNER JOIN date_range_tmp dts ON 1=1
+	INNER JOIN date_range_tmp dts(date) ON 1=1
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
 	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
-	AND a1."DateValue" = dts."DateValue"
-	
+--	AND a1."DateValue" = dts.date
+	AND CASE
+		WHEN $type_a = 1 THEN 
+			a1."DateValue" = dts.date
+		WHEN $type_a = 2 THEN 
+			a1."DateValue" = dts.date
+		WHEN $type_a = 3 THEN 
+			a1."DateValue" = dts.date
+		END
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
-	
+	LEFT JOIN arhiv_tmp a_prev1 ON prp_prev1.prp_id = a_prev1.pr_id AND a_prev1.typ_arh = $type_a 
+	AND CASE 
+		WHEN $type_a = 1 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 hour'
+		WHEN $type_a = 2 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 day'
+		WHEN $type_a = 3 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 month'
+		END
 	WHERE p.place_id = $place
 	GROUP BY "F0"
 	ORDER BY "F0"
@@ -98,21 +105,42 @@ SELECT
 	FROM
 	(
 	SELECT
-	dts."DateValueStrict" as "F0",
-	a1."Delta" as  "F1" 
+	dts.date as "F0",
+	CAST((a1."DataValue" - a_prev1."DataValue") as double precision) as "F1" 	 
 	FROM "Tepl"."Places_cnt" p 
-	INNER JOIN date_range_tmp dts ON 1=1 
+	INNER JOIN date_range_tmp dts(date) ON 1=1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp_prev1 ON p.plc_id = prp_prev1.plc_id AND prp_prev1."ParamRes_id" = 1 
 	LEFT JOIN "Tepl"."ParamResPlc_cnt" prp1 ON p.plc_id = prp1.plc_id AND prp1."ParamRes_id" = 1
 	LEFT JOIN arhiv_tmp a1 ON prp1.prp_id = a1.pr_id AND a1.typ_arh = $type_a 
-	AND a1."DateValue" = dts."DateValue"
-
+--	AND a1."DateValue" = dts.date
+	AND CASE
+		WHEN $type_a = 1 THEN 
+			a1."DateValue" = dts.date
+		WHEN $type_a = 2 THEN 
+			a1."DateValue" = dts.date
+		WHEN $type_a = 3 THEN 
+			a1."DateValue" = dts.date
+		END
+	LEFT JOIN arhiv_tmp a_prev1 ON prp_prev1.prp_id = a_prev1.pr_id AND a_prev1.typ_arh = $type_a 
+--	AND a_prev1."DateValue" = dts.date - interval '1 day'
+	AND CASE 
+		WHEN $type_a = 1 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 hour'
+		WHEN $type_a = 2 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 day'
+		WHEN $type_a = 3 THEN 
+			a_prev1."DateValue" = dts.date - interval '1 month'
+		END
 	WHERE p.plc_id = $place
 	ORDER BY "F0"
 	) results ;
 
-	SELECT dp."F0", dp."F1" as "F5" , dc."F2" as "F10", dc."F2" - dp."F1" AS "F15", ((dc."F2" - dp."F1") / dp."F1" * 100) AS "F20"
 
+	SELECT dp."F0", dp."F1" as "F5" , dc."F2" as "F10", dc."F2" - dp."F1" AS "F15", @((dp."F1" - dc."F2") / dp."F1" * 100) AS "F20"
+--		CASE 
+--		WHEN dp."F1" - dc."F2" > 0 THEN @(dp."F1" - dc."F2") / dp."F1" * 100 
+--		WHEN (dp."F1" - dc."F2") < 0 THEN @(dp."F1" - dc."F2") / dc."F2" * 100
+--		END AS "F20"
 	FROM  data_parent_tmp dp
 	INNER JOIN data_child_tmp dc ON dp."F0" = dc."F0"
 	WHERE @(@(dp."F1")  - @(dc."F2")) > 0.05 *  @(dp."F1")
