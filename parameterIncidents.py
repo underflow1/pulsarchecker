@@ -161,7 +161,7 @@ class parameterIncidents(parameterResource):
 					if type(item).__name__ == 'float':
 						item = round(item, 1)
 					balance.append(item)
-					#iHandler.createIncident({'incidentType': 6, 'description': 'Небаланс.', 'self': {}})
+				iHandler.createIncident({'incidentType': 6, 'description': 'Небаланс.', 'self': self})
 				return stuff.fillTemplate(config.balanceNoticeTemplate, {'balance': balance})
 			return False
 		else:

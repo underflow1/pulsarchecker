@@ -142,4 +142,6 @@ else:# ежедневный отчет + проверка баланса
 			balanceMessage = '<span>Отклонений по балансу не обнаружено.</span>'
 		message = dailyMessage + balanceMessage + stuff.returnFooter()
 		header = 'Ежедневная сводка мониторинга за ' + str(reportDate)
-		stuff.sendEmail(header, message)		
+		stuff.sendEmail(header, message)
+	else:
+		print('Неверный вызов')
