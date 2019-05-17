@@ -12,6 +12,7 @@ class parameterIncidents(parameterResource):
 		self.date = None
 		self.date_prev = None
 		self.lastArchiveData = None
+		self.lastAverageValue = None
 	
 	def setDate(self, date):
 		self.date = date
@@ -52,6 +53,7 @@ class parameterIncidents(parameterResource):
 			if result[0] < 0:
 				raise Exception('Среднее значение имеет отрицательную величину')
 			else:
+				self.lastAverageValue = result[0]
 				return result[0]
 		else:
 			raise Exception('Среднее значение не определено')
@@ -61,7 +63,7 @@ class parameterIncidents(parameterResource):
 			timerange = stuff.getWeekAverageDateRange(self.date)
 			averageValue = self.getAverageValue(timerange)
 			currentValue = self.getCurrenArchiveValue()
-			if currentValue > 0.5 and currentValue > (averageValue * 2):
+			if currentValue  > 2.5 and currentValue > (averageValue * 2):
 				return True
 		return False
 

@@ -18,7 +18,7 @@ class incidentHandler:
 			'staticmap': incident['self'].metadata['placeCoord'],
 			'namegroup': incident['self'].metadata['placeNameGroup'],
 			'lastarchivedata': incident['self'].lastArchiveData,
-			#'lastchecked_time': incident['self'].date,
+			'lastaverage': incident['self'].lastAverageValue,
 			'is_completed': False
 		}
 		query = db.queryPrepare(query, args)
