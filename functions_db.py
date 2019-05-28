@@ -24,6 +24,8 @@ class dboperator:
 				arguments[arg] = '\'' + str(args[arg]) + '\''
 			else: 
 				arguments[arg] = str(args[arg])
+			if args[arg] == None:
+				arguments[arg] = "NULL"				
 			find = "$" + str(arg)
 			replacewith = arguments[arg]
 			query = query.replace(find, replacewith)
