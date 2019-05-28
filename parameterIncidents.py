@@ -88,6 +88,7 @@ class parameterIncidents(parameterResource):
 			return {'incidentType': 5, 'description': 'Параметр не инициализирован: ' + self.edescription, 'self': self}		
 		else:
 			if not self.connectionActive:
+				self.date = self.newestArchiveTime
 				return {'incidentType': 1, 'description': 'Прибор не вышел на связь в установленное время.', 'self': self}
 			else:
 				try:

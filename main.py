@@ -9,7 +9,7 @@ autoclosedIncidentCounter = 0
 is_completedCounter = 0
 createdIncidents = []
 
-if len(sys.argv) == 1:
+if len(sys.argv) != 1:
 	parametersList = stuff.getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -100,7 +100,7 @@ if len(sys.argv) == 1:
 				stuff.sendEmail(header, message)
 
 else:# ежедневный отчет + проверка баланса
-	if len(sys.argv) == 2 and sys.argv[1] == 'balance':
+	if len(sys.argv) == 1:# and sys.argv[1] == 'balance':
 		parametersList = stuff.getParamCheckList()
 		bushes = []
 		for param_id in parametersList:
@@ -128,11 +128,15 @@ else:# ежедневный отчет + проверка баланса
 				# и начинаем проверять баланс на каждую из пропущенных дат
 				balancePart = ''
 				for bdate in dates:
-					pBush.setDate(bdate)
-					bp = pBush.getBalanceMessage()
-					if bp:
-						balancePart = balancePart + bp
-
+					try:
+						pBush.setDate(bdate)
+						bp = pBush.getBalanceMessage()
+					except:
+						balancePart = balancePart + bdate.strftime("%Y%m%d") + ' ошибка<br>'
+						break
+					else:
+						if bp:
+							balancePart = balancePart + bp			
 				if balancePart:
 					balanceMessage = balanceMessage + '<strong><h5>' + pBush.metadata['parentPlaceName'] + ' ' + pBush.metadata['placeName'] + '</h5></strong>' + balancePart
 		
