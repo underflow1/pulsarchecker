@@ -9,7 +9,7 @@ autoclosedIncidentCounter = 0
 is_completedCounter = 0
 createdIncidents = []
 
-if len(sys.argv) != 1:
+if len(sys.argv) == 1:
 	parametersList = stuff.getParamCheckList()
 	for param_id in parametersList:
 		iHandler = incidentHandler()
@@ -100,7 +100,7 @@ if len(sys.argv) != 1:
 				stuff.sendEmail(header, message)
 
 else:# ежедневный отчет + проверка баланса
-	if len(sys.argv) == 1:# and sys.argv[1] == 'balance':
+	if len(sys.argv) == 2 and sys.argv[1] == 'balance':
 		parametersList = stuff.getParamCheckList()
 		bushes = []
 		for param_id in parametersList:
