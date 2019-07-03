@@ -29,8 +29,8 @@ class incidentHandler:
 			status = 'autoclosed'
 		else:
 			status = 'closed'
-		query = 'UPDATE "Tepl"."Alert_cnt" SET status = %s WHERE id = %s '
-		args = (status, incident_id)
+		query = 'UPDATE "Tepl"."Alert_cnt" SET status = $status WHERE id = $incident_id '
+		args = {'status': status, 'incident_id': incident_id}
 		query = db.queryPrepare(query, args)
 		db.executeInsertUpdate(query)
 
